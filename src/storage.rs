@@ -1,5 +1,7 @@
 use futures::executor::block_on;
 use pyo3::prelude::*;
+use pyo3::types::{PyBytes, PyDict};
+use std::collections::HashMap;
 
 use crate::address::ProtocolAddress;
 use crate::error::{Result, SignalProtocolError};
@@ -12,7 +14,7 @@ use libsignal_protocol_rust::{
     IdentityKeyStore, PreKeyStore, SenderKeyStore, SessionStore, SignedPreKeyStore,
 };
 
-#[pyclass]
+#[pyclass(subclass)]
 #[derive(Clone)]
 pub struct InMemSignalProtocolStore {
     pub store: libsignal_protocol_rust::InMemSignalProtocolStore,
@@ -27,6 +29,24 @@ impl InMemSignalProtocolStore {
             Ok(store) => Ok(Self { store }),
             Err(err) => Err(SignalProtocolError::new_err(err)),
         }
+    }
+
+    #[getter]
+    fn get_sessions_internal_map(&self, py: Python) -> PyResult<PyObject> {
+        // This assumes the internal store has a `sessions` field that is a HashMap
+        // wrapped in an RwLock or Mutex. The exact access path might need adjustment
+        // based on the actual structure of `libsignal_protocol_rust::InMemSignalProtocolStore`.
+        let store_guard = self.store.store.read().unwrap(); // Assuming RwLock
+        let sessions_map_rust = &store_guard.sessions;
+
+        let py_dict = PyDict::new(py);
+        for (address, record_bytes) in sessions_map_rust.iter() {
+            // ProtocolAddress has __str__ through PyObjectProtocol
+            let py_address_str = address.__str__()?;
+            let py_record_bytes = PyBytes::new(py, record_bytes);
+            py_dict.set_item(py_address_str, py_record_bytes)?;
+        }
+        Ok(py_dict.into())
     }
 }
 
