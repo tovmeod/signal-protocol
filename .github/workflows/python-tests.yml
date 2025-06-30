@@ -26,7 +26,7 @@ jobs:
       with:
         toolchain: nightly-2020-11-09 # From rust-toolchain file
         override: true
-        components: [rustfmt, clippy] # Optional, but good practice
+        components: rustfmt, clippy # Optional, but good practice
 
     - name: Install Python build dependencies
       run: pip install -U setuptools wheel setuptools-rust
