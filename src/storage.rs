@@ -1,7 +1,6 @@
 use futures::executor::block_on;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
-use std::collections::HashMap;
 
 use crate::address::ProtocolAddress;
 use crate::error::{Result, SignalProtocolError};
@@ -36,7 +35,7 @@ impl InMemSignalProtocolStore {
         // This assumes the internal store has a `sessions` field that is a HashMap
         // wrapped in an RwLock or Mutex. The exact access path might need adjustment
         // based on the actual structure of `libsignal_protocol_rust::InMemSignalProtocolStore`.
-        let store_guard = self.store.store.read().unwrap(); // Assuming RwLock
+        let store_guard = self.store.session_store.read().unwrap(); // Assuming RwLock
         let sessions_map_rust = &store_guard.sessions;
 
         let py_dict = PyDict::new(py);
