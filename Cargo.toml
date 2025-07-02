@@ -1,6 +1,6 @@
 [package]
 name = "signal-protocol"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["jen <jen@freedom.press>"]
 edition = "2018"
 license = "AGPL-3.0-only"
@@ -8,8 +8,9 @@ license = "AGPL-3.0-only"
 [dependencies]
 rand = "0.7.3"
 libsignal-protocol-rust = { git = "https://github.com/freedomofpress/libsignal-client", rev="609a1de73380a2b9d314db625e6b2f0368e838ec" }
-pyo3 = { version = "0.12.4", features = ["extension-module"] }
-futures = "0.3.7"
+pyo3 = { version = "0.25.1", features = ["extension-module"] }
+futures = "0.3.31"
+pyo3-stub-gen = "0.10.0"
 
 [lib]
 name = "signal_protocol"

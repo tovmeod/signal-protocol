@@ -47,8 +47,16 @@ pub fn process_prekey_bundle(
     Ok(())
 }
 
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
-    module.add_wrapped(wrap_pyfunction!(process_prekey_bundle))?;
-    module.add_wrapped(wrap_pyfunction!(process_prekey))?;
+#[pymodule]
+fn session(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(process_prekey_bundle, m)?)?;
+    m.add_function(wrap_pyfunction!(process_prekey, m)?)?;
+    Ok(())
+}
+
+// Keep this for backward compatibility during transition
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(process_prekey_bundle, module)?)?;
+    module.add_function(wrap_pyfunction!(process_prekey, module)?)?;
     Ok(())
 }

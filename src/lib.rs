@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use pyo3::wrap_pyfunction;
 
 mod address;
 mod curve;
@@ -26,87 +27,104 @@ mod storage;
 ///
 /// We do not expose a Python submodule for HKDF (a module in the upstream crate).
 #[pymodule]
-fn signal_protocol(py: Python, module: &PyModule) -> PyResult<()> {
+fn _signal_protocol(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Add submodules first
     let address_submod = PyModule::new(py, "address")?;
-    address::init_submodule(address_submod)?;
-    module.add_submodule(address_submod)?;
+    address::init_submodule(&address_submod)?;
+    module.add_submodule(&address_submod)?;
 
     let curve_submod = PyModule::new(py, "curve")?;
-    curve::init_curve_submodule(curve_submod)?;
-    module.add_submodule(curve_submod)?;
+    curve::init_curve_submodule(&curve_submod)?;
+    module.add_submodule(&curve_submod)?;
 
     let error_submod = PyModule::new(py, "error")?;
-    error::init_submodule(py, error_submod)?;
-    module.add_submodule(error_submod)?;
+    error::init_submodule(py, &error_submod)?;
+    module.add_submodule(&error_submod)?;
 
     let fingerprint_submod = PyModule::new(py, "fingerprint")?;
-    fingerprint::init_submodule(fingerprint_submod)?;
-    module.add_submodule(fingerprint_submod)?;
+    fingerprint::init_submodule(&fingerprint_submod)?;
+    module.add_submodule(&fingerprint_submod)?;
 
     let group_cipher_submod = PyModule::new(py, "group_cipher")?;
-    group_cipher::init_submodule(group_cipher_submod)?;
-    module.add_submodule(group_cipher_submod)?;
+    group_cipher::init_submodule(&group_cipher_submod)?;
+    module.add_submodule(&group_cipher_submod)?;
 
     let identity_key_submod = PyModule::new(py, "identity_key")?;
-    identity_key::init_submodule(identity_key_submod)?;
-    module.add_submodule(identity_key_submod)?;
+    identity_key::init_submodule(&identity_key_submod)?;
+    module.add_submodule(&identity_key_submod)?;
 
     let protocol_submod = PyModule::new(py, "protocol")?;
-    protocol::init_submodule(protocol_submod)?;
-    module.add_submodule(protocol_submod)?;
+    protocol::init_submodule(&protocol_submod)?;
+    module.add_submodule(&protocol_submod)?;
 
     let ratchet_submod = PyModule::new(py, "ratchet")?;
-    ratchet::init_submodule(ratchet_submod)?;
-    module.add_submodule(ratchet_submod)?;
+    ratchet::init_submodule(&ratchet_submod)?;
+    module.add_submodule(&ratchet_submod)?;
 
     let sealed_sender_submod = PyModule::new(py, "sealed_sender")?;
-    sealed_sender::init_submodule(sealed_sender_submod)?;
-    module.add_submodule(sealed_sender_submod)?;
+    sealed_sender::init_submodule(&sealed_sender_submod)?;
+    module.add_submodule(&sealed_sender_submod)?;
 
     let sender_keys_submod = PyModule::new(py, "sender_keys")?;
-    sender_keys::init_submodule(sender_keys_submod)?;
-    module.add_submodule(sender_keys_submod)?;
+    sender_keys::init_submodule(&sender_keys_submod)?;
+    module.add_submodule(&sender_keys_submod)?;
 
     let session_cipher_submod = PyModule::new(py, "session_cipher")?;
-    session_cipher::init_submodule(session_cipher_submod)?;
-    module.add_submodule(session_cipher_submod)?;
+    session_cipher::init_submodule(&session_cipher_submod)?;
+    module.add_submodule(&session_cipher_submod)?;
 
     let session_submod = PyModule::new(py, "session")?;
-    session::init_submodule(session_submod)?;
-    module.add_submodule(session_submod)?;
+    session::init_submodule(&session_submod)?;
+    module.add_submodule(&session_submod)?;
 
     let state_submod = PyModule::new(py, "state")?;
-    state::init_submodule(state_submod)?;
-    module.add_submodule(state_submod)?;
+    state::init_submodule(&state_submod)?;
+    module.add_submodule(&state_submod)?;
 
     let storage_submod = PyModule::new(py, "storage")?;
-    storage::init_submodule(storage_submod)?;
-    module.add_submodule(storage_submod)?;
+    storage::init_submodule(&storage_submod)?;
+    module.add_submodule(&storage_submod)?;
 
-    // Workaround to enable imports from submodules. Upstream issue: pyo3 issue #759
-    // https://github.com/PyO3/pyo3/issues/759#issuecomment-653964601
-    let mods = [
-        "address",
-        "curve",
-        "error",
-        "fingerprint",
-        "group_cipher",
-        "identity_key",
-        "protocol",
-        "ratchet",
-        "sealed_sender",
-        "sender_keys",
-        "session_cipher",
-        "session",
-        "state",
-        "storage",
-    ];
-    for module_name in mods.iter() {
-        let cmd = format!(
-            "import sys; sys.modules['signal_protocol.{}'] = {}",
-            module_name, module_name
-        );
-        py.run(&cmd, None, Some(module.dict()))?;
-    }
+    // Explicitly set each submodule as an attribute of the main module
+    module.setattr("address", address_submod)?;
+    module.setattr("curve", curve_submod)?;
+    module.setattr("error", error_submod)?;
+    module.setattr("fingerprint", fingerprint_submod)?;
+    module.setattr("group_cipher", group_cipher_submod)?;
+    module.setattr("identity_key", identity_key_submod)?;
+    module.setattr("protocol", protocol_submod)?;
+    module.setattr("ratchet", ratchet_submod)?;
+    module.setattr("sealed_sender", sealed_sender_submod)?;
+    module.setattr("sender_keys", sender_keys_submod)?;
+    module.setattr("session_cipher", session_cipher_submod)?;
+    module.setattr("session", session_submod)?;
+    module.setattr("state", state_submod)?;
+    module.setattr("storage", storage_submod)?;
+
+    // Now expose all classes and functions at the top level for pyo3-stubgen
+    
+    // Address module classes
+    module.add_class::<address::ProtocolAddress>()?;
+    
+    // Curve module classes and functions
+    module.add_class::<curve::KeyPair>()?;
+    module.add_class::<curve::PublicKey>()?;
+    module.add_class::<curve::PrivateKey>()?;
+    module.add_function(wrap_pyfunction!(curve::generate_keypair, module)?)?;
+    module.add_function(wrap_pyfunction!(curve::verify_signature, module)?)?;
+    
+    // Error module classes
+    module.add_class::<error::SignalProtocolError>()?;
+    
+    // Ratchet module classes
+    module.add_class::<ratchet::BobSignalProtocolParameters>()?;
+    
+    // Sender keys module classes
+    module.add_class::<sender_keys::SenderKeyName>()?;
+    module.add_class::<sender_keys::SenderKeyRecord>()?;
+    
+    // Add classes from other modules as needed...
+    // You'll need to add similar lines for all other classes in your modules
+
     Ok(())
 }

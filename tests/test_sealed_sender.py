@@ -1,30 +1,19 @@
 import pytest
 
-from signal_protocol.address import ProtocolAddress
-from signal_protocol.curve import KeyPair
-from signal_protocol.error import SignalProtocolException
-from signal_protocol.identity_key import IdentityKeyPair
-from signal_protocol.sealed_sender import (
-    ServerCertificate,
-    SenderCertificate,
-    sealed_sender_encrypt,
-    sealed_sender_decrypt,
-)
-from signal_protocol.session import process_prekey_bundle
-from signal_protocol.storage import InMemSignalProtocolStore
+from signal_protocol import address, curve, error, identity_key, sealed_sender, session, storage
 
 from tests.utils.sessions import create_pre_key_bundle
 
 
 def test_server_cert():
-    trust_root = KeyPair.generate()
-    server_key = KeyPair.generate()
-    server_cert = ServerCertificate(
+    trust_root = curve.KeyPair.generate()
+    server_key = curve.KeyPair.generate()
+    server_cert = sealed_sender.ServerCertificate(
         1, server_key.public_key(), trust_root.private_key()
     )
     serialized_server_cert = server_cert.serialized()
 
-    recovered_server_cert = ServerCertificate.deserialize(serialized_server_cert)
+    recovered_server_cert = sealed_sender.ServerCertificate.deserialize(serialized_server_cert)
     assert recovered_server_cert.validate(trust_root.public_key())
 
     cert_bits = len(serialized_server_cert) * 8
@@ -41,9 +30,9 @@ def test_server_cert():
         # either the cert should not validate, or it should not even create
         # a valid ServerCertificate object
         try:
-            cert = ServerCertificate.deserialize(serialized_server_cert)
+            cert = sealed_sender.ServerCertificate.deserialize(serialized_server_cert)
             assert not cert.validate(trust_root.public_key())
-        except SignalProtocolException as e:
+        except error.SignalProtocolException as e:
             assert (
                 "protobuf encoding was invalid" in str(e)
                 or "failed to decode protobuf" in str(e)
@@ -59,17 +48,17 @@ def test_server_cert():
 
 
 def test_sender_cert():
-    trust_root = KeyPair.generate()
-    server_key = KeyPair.generate()
-    key = KeyPair.generate()
-    server_cert = ServerCertificate(
+    trust_root = curve.KeyPair.generate()
+    server_key = curve.KeyPair.generate()
+    key = curve.KeyPair.generate()
+    server_cert = sealed_sender.ServerCertificate(
         1, server_key.public_key(), trust_root.private_key()
     )
 
     device_id = 2
     expiration = 1234567
 
-    sender_cert = SenderCertificate(
+    sender_cert = sealed_sender.SenderCertificate(
         "sender_uuid",
         "sender_e164",
         key.public_key(),
@@ -97,9 +86,9 @@ def test_sender_cert():
         # either the cert should not validate, or it should not even create
         # a valid SenderCertificate object
         try:
-            cert = SenderCertificate.deserialize(serialized_server_cert)
+            cert = sealed_sender.SenderCertificate.deserialize(serialized_server_cert)
             assert not cert.validate(trust_root.public_key(), expiration)
-        except SignalProtocolException as e:
+        except error.SignalProtocolException as e:
             assert (
                 "protobuf encoding was invalid" in str(e)
                 or "failed to decode protobuf" in str(e)
@@ -123,34 +112,34 @@ def test_sealed_sender_happy():
     alice_uuid = "alice_uuid"
     bob_uuid = "bob_uuid"
 
-    alice_identity_key_pair = IdentityKeyPair.generate()
+    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = InMemSignalProtocolStore(
+    alice_store = storage.InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     alice_pubkey = alice_identity_key_pair.public_key()
 
-    bob_identity_key_pair = IdentityKeyPair.generate()
+    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
-    bob_uuid_address = ProtocolAddress(bob_uuid, bob_device_id)
+    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_uuid_address = address.ProtocolAddress(bob_uuid, bob_device_id)
 
     bob_pre_key_bundle = create_pre_key_bundle(bob_store)
 
-    process_prekey_bundle(
+    session.process_prekey_bundle(
         bob_uuid_address,
         alice_store,
         bob_pre_key_bundle,
     )
 
-    trust_root = KeyPair.generate()
-    server_key = KeyPair.generate()
-    server_cert = ServerCertificate(
+    trust_root = curve.KeyPair.generate()
+    server_key = curve.KeyPair.generate()
+    server_cert = sealed_sender.ServerCertificate(
         1, server_key.public_key(), trust_root.private_key()
     )
 
     expiration = 1234567
-    sender_cert = SenderCertificate(
+    sender_cert = sealed_sender.SenderCertificate(
         alice_uuid,
         alice_e164,
         alice_pubkey,
@@ -161,11 +150,11 @@ def test_sealed_sender_happy():
     )
 
     alice_plaintext = b"teehee"
-    alice_ciphertext = sealed_sender_encrypt(
+    alice_ciphertext = sealed_sender.sealed_sender_encrypt(
         bob_uuid_address, sender_cert, alice_plaintext, alice_store
     )
 
-    bob_plaintext = sealed_sender_decrypt(
+    bob_plaintext = sealed_sender.sealed_sender_decrypt(
         alice_ciphertext,
         trust_root.public_key(),
         expiration - 1,
@@ -190,34 +179,34 @@ def test_sealed_sender_expired_cert():
     alice_uuid = "alice_uuid"
     bob_uuid = "bob_uuid"
 
-    alice_identity_key_pair = IdentityKeyPair.generate()
+    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = InMemSignalProtocolStore(
+    alice_store = storage.InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     alice_pubkey = alice_identity_key_pair.public_key()
 
-    bob_identity_key_pair = IdentityKeyPair.generate()
+    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
-    bob_uuid_address = ProtocolAddress(bob_uuid, bob_device_id)
+    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_uuid_address = address.ProtocolAddress(bob_uuid, bob_device_id)
 
     bob_pre_key_bundle = create_pre_key_bundle(bob_store)
 
-    process_prekey_bundle(
+    session.process_prekey_bundle(
         bob_uuid_address,
         alice_store,
         bob_pre_key_bundle,
     )
 
-    trust_root = KeyPair.generate()
-    server_key = KeyPair.generate()
-    server_cert = ServerCertificate(
+    trust_root = curve.KeyPair.generate()
+    server_key = curve.KeyPair.generate()
+    server_cert = sealed_sender.ServerCertificate(
         1, server_key.public_key(), trust_root.private_key()
     )
 
     expiration = 1234567
-    sender_cert = SenderCertificate(
+    sender_cert = sealed_sender.SenderCertificate(
         alice_uuid,
         alice_e164,
         alice_pubkey,
@@ -228,12 +217,12 @@ def test_sealed_sender_expired_cert():
     )
 
     alice_plaintext = b"teehee"
-    alice_ciphertext = sealed_sender_encrypt(
+    alice_ciphertext = sealed_sender.sealed_sender_encrypt(
         bob_uuid_address, sender_cert, alice_plaintext, alice_store
     )
 
-    with pytest.raises(SignalProtocolException, match="invalid sealed sender"):
-        sealed_sender_decrypt(
+    with pytest.raises(error.SignalProtocolException, match="invalid sealed sender"):
+        sealed_sender.sealed_sender_decrypt(
             alice_ciphertext,
             trust_root.public_key(),
             expiration + 1,
@@ -253,34 +242,34 @@ def test_sealed_sender_invalid_trust_root():
     alice_uuid = "alice_uuid"
     bob_uuid = "bob_uuid"
 
-    alice_identity_key_pair = IdentityKeyPair.generate()
+    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = InMemSignalProtocolStore(
+    alice_store = storage.InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     alice_pubkey = alice_identity_key_pair.public_key()
 
-    bob_identity_key_pair = IdentityKeyPair.generate()
+    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
-    bob_uuid_address = ProtocolAddress(bob_uuid, bob_device_id)
+    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_uuid_address = address.ProtocolAddress(bob_uuid, bob_device_id)
 
     bob_pre_key_bundle = create_pre_key_bundle(bob_store)
 
-    process_prekey_bundle(
+    session.process_prekey_bundle(
         bob_uuid_address,
         alice_store,
         bob_pre_key_bundle,
     )
 
-    trust_root = KeyPair.generate()
-    server_key = KeyPair.generate()
-    server_cert = ServerCertificate(
+    trust_root = curve.KeyPair.generate()
+    server_key = curve.KeyPair.generate()
+    server_cert = sealed_sender.ServerCertificate(
         1, server_key.public_key(), trust_root.private_key()
     )
 
     expiration = 1234567
-    sender_cert = SenderCertificate(
+    sender_cert = sealed_sender.SenderCertificate(
         alice_uuid,
         alice_e164,
         alice_pubkey,
@@ -291,14 +280,14 @@ def test_sealed_sender_invalid_trust_root():
     )
 
     alice_plaintext = b"teehee"
-    alice_ciphertext = sealed_sender_encrypt(
+    alice_ciphertext = sealed_sender.sealed_sender_encrypt(
         bob_uuid_address, sender_cert, alice_plaintext, alice_store
     )
 
-    invalid_trust_root = KeyPair.generate()
+    invalid_trust_root = curve.KeyPair.generate()
 
-    with pytest.raises(SignalProtocolException, match="invalid sealed sender"):
-        sealed_sender_decrypt(
+    with pytest.raises(error.SignalProtocolException, match="invalid sealed sender"):
+        sealed_sender.sealed_sender_decrypt(
             alice_ciphertext,
             invalid_trust_root.public_key(),
             expiration + 1,

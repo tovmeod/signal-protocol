@@ -364,14 +364,28 @@ pub fn sealed_sender_decrypt_to_usmc(
     }
 }
 
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
+#[pymodule]
+fn sealed_sender(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<SenderCertificate>()?;
+    m.add_class::<ServerCertificate>()?;
+    m.add_class::<UnidentifiedSenderMessageContent>()?;
+    m.add_class::<UnidentifiedSenderMessage>()?;
+    m.add_class::<SealedSenderDecryptionResult>()?;
+    m.add_function(wrap_pyfunction!(sealed_sender_decrypt, m)?)?;
+    m.add_function(wrap_pyfunction!(sealed_sender_decrypt_to_usmc, m)?)?;
+    m.add_function(wrap_pyfunction!(sealed_sender_encrypt, m)?)?;
+    Ok(())
+}
+
+// Keep this for backward compatibility during transition
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<SenderCertificate>()?;
     module.add_class::<ServerCertificate>()?;
     module.add_class::<UnidentifiedSenderMessageContent>()?;
     module.add_class::<UnidentifiedSenderMessage>()?;
     module.add_class::<SealedSenderDecryptionResult>()?;
-    module.add_wrapped(wrap_pyfunction!(sealed_sender_decrypt))?;
-    module.add_wrapped(wrap_pyfunction!(sealed_sender_decrypt_to_usmc))?;
-    module.add_wrapped(wrap_pyfunction!(sealed_sender_encrypt))?;
+    module.add_function(wrap_pyfunction!(sealed_sender_decrypt, module)?)?;
+    module.add_function(wrap_pyfunction!(sealed_sender_decrypt_to_usmc, module)?)?;
+    module.add_function(wrap_pyfunction!(sealed_sender_encrypt, module)?)?;
     Ok(())
 }

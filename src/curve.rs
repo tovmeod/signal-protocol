@@ -1,7 +1,7 @@
-use pyo3::class::basic::{CompareOp, PyObjectProtocol};
 use pyo3::exceptions;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use pyo3::basic::CompareOp;
 use pyo3::wrap_pyfunction;
 
 use rand::rngs::OsRng;
@@ -9,7 +9,7 @@ use rand::rngs::OsRng;
 use crate::error::Result;
 
 #[pyfunction]
-pub fn generate_keypair(py: Python) -> PyResult<(PyObject, PyObject)> {
+pub fn generate_keypair(py: Python<'_>) -> PyResult<(PyObject, PyObject)> {
     let mut csprng = OsRng;
     let key_pair = libsignal_protocol_rust::KeyPair::generate(&mut csprng);
 
@@ -48,18 +48,18 @@ impl KeyPair {
         Ok(PrivateKey::deserialize(&self.key.private_key.serialize())?)
     }
 
-    pub fn serialize(&self, py: Python) -> PyObject {
+    pub fn serialize(&self, py: Python<'_>) -> PyObject {
         let result = self.key.public_key.serialize();
         PyBytes::new(py, &result).into()
     }
 
-    pub fn calculate_signature(&self, py: Python, message: &[u8]) -> Result<PyObject> {
+    pub fn calculate_signature(&self, py: Python<'_>, message: &[u8]) -> Result<PyObject> {
         let mut csprng = OsRng;
         let sig = self.key.calculate_signature(&message, &mut csprng)?;
         Ok(PyBytes::new(py, &sig).into())
     }
 
-    pub fn calculate_agreement(&self, py: Python, their_key: &PublicKey) -> Result<PyObject> {
+    pub fn calculate_agreement(&self, py: Python<'_>, their_key: &PublicKey) -> Result<PyObject> {
         let agreement = self.key.calculate_agreement(&their_key.key)?;
         Ok(PyBytes::new(py, &agreement).into())
     }
@@ -97,18 +97,16 @@ impl PublicKey {
         })
     }
 
-    pub fn serialize(&self, py: Python) -> PyObject {
+    pub fn serialize(&self, py: Python<'_>) -> PyObject {
         PyBytes::new(py, &self.key.serialize()).into()
     }
 
     pub fn verify_signature(&self, message: &[u8], signature: &[u8]) -> Result<bool> {
         Ok(self.key.verify_signature(&message, &signature)?)
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for PublicKey {
-    fn __richcmp__(&self, other: PublicKey, op: CompareOp) -> PyResult<bool> {
+    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
+        let other = other.extract::<PyRef<'_, PublicKey>>()?;
         match op {
             CompareOp::Eq => Ok(self.key.serialize() == other.key.serialize()),
             CompareOp::Ne => Ok(self.key.serialize() != other.key.serialize()),
@@ -116,6 +114,7 @@ impl PyObjectProtocol for PublicKey {
         }
     }
 }
+
 
 #[pyclass]
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -139,17 +138,17 @@ impl PrivateKey {
         })
     }
 
-    pub fn serialize(&self, py: Python) -> PyObject {
+    pub fn serialize(&self, py: Python<'_>) -> PyObject {
         PyBytes::new(py, &self.key.serialize()).into()
     }
 
-    pub fn calculate_signature(&self, message: &[u8], py: Python) -> Result<PyObject> {
+    pub fn calculate_signature(&self, message: &[u8], py: Python<'_>) -> Result<PyObject> {
         let mut csprng = OsRng;
         let sig = self.key.calculate_signature(message, &mut csprng)?;
         Ok(PyBytes::new(py, &sig).into())
     }
 
-    pub fn calculate_agreement(&self, py: Python, their_key: &PublicKey) -> Result<PyObject> {
+    pub fn calculate_agreement(&self, py: Python<'_>, their_key: &PublicKey) -> Result<PyObject> {
         let result = self.key.calculate_agreement(&their_key.key)?;
         Ok(PyBytes::new(py, &result).into())
     }
@@ -167,11 +166,11 @@ pub fn verify_signature(public_key: &PublicKey, message: &[u8], signature: &[u8]
 }
 
 /// KeyType is not exposed as part of the Python API.
-pub fn init_curve_submodule(module: &PyModule) -> PyResult<()> {
+pub fn init_curve_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<KeyPair>()?;
     module.add_class::<PublicKey>()?;
     module.add_class::<PrivateKey>()?;
-    module.add_wrapped(wrap_pyfunction!(generate_keypair))?;
-    module.add_wrapped(wrap_pyfunction!(verify_signature))?;
+    module.add_function(wrap_pyfunction!(generate_keypair, module)?)?;
+    module.add_function(wrap_pyfunction!(verify_signature, module)?)?;
     Ok(())
 }

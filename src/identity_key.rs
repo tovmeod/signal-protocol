@@ -4,7 +4,6 @@ use pyo3::basic::CompareOp;
 use pyo3::exceptions;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::PyObjectProtocol;
 
 use rand::rngs::OsRng;
 
@@ -33,14 +32,12 @@ impl IdentityKey {
         Ok(PublicKey::deserialize(&self.key.public_key().serialize())?)
     }
 
-    pub fn serialize(&self, py: Python) -> PyObject {
+    pub fn serialize(&self, py: Python<'_>) -> PyObject {
         PyBytes::new(py, &self.key.serialize()).into()
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for IdentityKey {
-    fn __richcmp__(&self, other: IdentityKey, op: CompareOp) -> PyResult<bool> {
+    fn __richcmp__(&self, other: &Bound<'_, PyAny>, op: CompareOp) -> PyResult<bool> {
+        let other = other.extract::<PyRef<'_, IdentityKey>>()?;
         match op {
             CompareOp::Eq => Ok(self.key.serialize() == other.key.serialize()),
             CompareOp::Ne => Ok(self.key.serialize() != other.key.serialize()),
@@ -96,12 +93,12 @@ impl IdentityKeyPair {
         )?)
     }
 
-    pub fn serialize(&self, py: Python) -> PyObject {
+    pub fn serialize(&self, py: Python<'_>) -> PyObject {
         PyBytes::new(py, &self.key.serialize()).into()
     }
 }
 
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<IdentityKey>()?;
     module.add_class::<IdentityKeyPair>()?;
     Ok(())

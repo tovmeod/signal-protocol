@@ -1,4 +1,3 @@
-use pyo3::class::basic::PyObjectProtocol;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -43,14 +42,11 @@ impl Fingerprint {
         Ok(self.state.scannable.compare(combined)?)
     }
 
-    pub fn serialize(&self, py: Python) -> Result<PyObject> {
+    pub fn serialize(&self, py: Python<'_>) -> Result<PyObject> {
         let fingerprint = self.state.scannable.serialize()?;
         Ok(PyBytes::new(py, &fingerprint).into())
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for Fingerprint {
     fn __str__(&self) -> Result<String> {
         self.display_string()
     }
@@ -65,7 +61,7 @@ impl PyObjectProtocol for Fingerprint {
 /// and ScannableFingerprint implemented on the Fingerprint directly.
 ///
 /// ScannableFingerprint::deserialize() is not implemented.
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Fingerprint>()?;
     Ok(())
 }

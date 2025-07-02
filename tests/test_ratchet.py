@@ -1,14 +1,6 @@
 import pytest
 
-from signal_protocol.state import SessionRecord
-from signal_protocol.curve import KeyPair, PrivateKey, PublicKey
-from signal_protocol.identity_key import IdentityKey, IdentityKeyPair
-from signal_protocol.ratchet import (
-    BobSignalProtocolParameters,
-    initialize_bob_session,
-    AliceSignalProtocolParameters,
-    initialize_alice_session,
-)
+from signal_protocol import state, curve, identity_key, ratchet
 
 
 def test_ratcheting_session_as_bob():
@@ -48,27 +40,27 @@ def test_ratcheting_session_as_bob():
         "9797caca53c989bbe229a40ca7727010eb2604fc14945d77958a0aeda088b44d"
     )
 
-    bob_identity_key_public = IdentityKey(bob_identity_public)
+    bob_identity_key_public = identity_key.IdentityKey(bob_identity_public)
 
-    bob_identity_key_private = PrivateKey.deserialize(bob_identity_private)
+    bob_identity_key_private = curve.PrivateKey.deserialize(bob_identity_private)
 
-    bob_identity_key_pair = IdentityKeyPair(
+    bob_identity_key_pair = identity_key.IdentityKeyPair(
         bob_identity_key_public, bob_identity_key_private
     )
 
-    bob_ephemeral_pair = KeyPair.from_public_and_private(
+    bob_ephemeral_pair = curve.KeyPair.from_public_and_private(
         bob_ephemeral_public, bob_ephemeral_private
     )
 
-    bob_signed_prekey_pair = KeyPair.from_public_and_private(
+    bob_signed_prekey_pair = curve.KeyPair.from_public_and_private(
         bob_signed_prekey_public, bob_signed_prekey_private
     )
 
-    alice_base_public_key = PublicKey.deserialize(alice_base_public)
+    alice_base_public_key = curve.PublicKey.deserialize(alice_base_public)
 
-    alice_identity_public = IdentityKey(alice_identity_public_bytes)
+    alice_identity_public = identity_key.IdentityKey(alice_identity_public_bytes)
 
-    bob_parameters = BobSignalProtocolParameters(
+    bob_parameters = ratchet.BobSignalProtocolParameters(
         bob_identity_key_pair,
         bob_signed_prekey_pair,
         None,
@@ -77,7 +69,7 @@ def test_ratcheting_session_as_bob():
         alice_base_public_key,
     )
 
-    bob_record = initialize_bob_session(bob_parameters)
+    bob_record = ratchet.initialize_bob_session(bob_parameters)
 
     assert bob_record.local_identity_key_bytes() == bob_identity_public
     assert bob_record.remote_identity_key_bytes() == alice_identity_public_bytes
@@ -120,25 +112,25 @@ def test_ratcheting_session_as_alice():
         "ab9be50e5cb22a925446ab90ee5670545f4fd32902459ec274b6ad0ae5d6031a"
     )
 
-    alice_identity_key_public = IdentityKey(alice_identity_public)
+    alice_identity_key_public = identity_key.IdentityKey(alice_identity_public)
 
-    bob_ephemeral_public = PublicKey.deserialize(bob_ephemeral_public)
+    bob_ephemeral_public = curve.PublicKey.deserialize(bob_ephemeral_public)
 
-    alice_identity_key_private = PrivateKey.deserialize(alice_identity_private)
+    alice_identity_key_private = curve.PrivateKey.deserialize(alice_identity_private)
 
-    bob_signed_prekey_public = PublicKey.deserialize(bob_signed_prekey_public)
+    bob_signed_prekey_public = curve.PublicKey.deserialize(bob_signed_prekey_public)
 
-    alice_identity_key_pair = IdentityKeyPair(
+    alice_identity_key_pair = identity_key.IdentityKeyPair(
         alice_identity_key_public, alice_identity_key_private
     )
 
-    bob_identity_public = IdentityKey(bob_identity_public_bytes)
+    bob_identity_public = identity_key.IdentityKey(bob_identity_public_bytes)
 
-    alice_base_key = KeyPair.from_public_and_private(
+    alice_base_key = curve.KeyPair.from_public_and_private(
         alice_base_public, alice_base_private
     )
 
-    alice_parameters = AliceSignalProtocolParameters(
+    alice_parameters = ratchet.AliceSignalProtocolParameters(
         alice_identity_key_pair,
         alice_base_key,
         bob_identity_public,
@@ -147,7 +139,7 @@ def test_ratcheting_session_as_alice():
         bob_ephemeral_public,
     )
 
-    alice_record = initialize_alice_session(alice_parameters)
+    alice_record = ratchet.initialize_alice_session(alice_parameters)
 
     assert alice_record.local_identity_key_bytes() == alice_identity_public
     assert alice_record.remote_identity_key_bytes() == bob_identity_public_bytes
