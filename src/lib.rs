@@ -101,30 +101,5 @@ fn _signal_protocol(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()
     module.setattr("state", state_submod)?;
     module.setattr("storage", storage_submod)?;
 
-    // Now expose all classes and functions at the top level for pyo3-stubgen
-    
-    // Address module classes
-    module.add_class::<address::ProtocolAddress>()?;
-    
-    // Curve module classes and functions
-    module.add_class::<curve::KeyPair>()?;
-    module.add_class::<curve::PublicKey>()?;
-    module.add_class::<curve::PrivateKey>()?;
-    module.add_function(wrap_pyfunction!(curve::generate_keypair, module)?)?;
-    module.add_function(wrap_pyfunction!(curve::verify_signature, module)?)?;
-    
-    // Error module classes
-    module.add_class::<error::SignalProtocolError>()?;
-    
-    // Ratchet module classes
-    module.add_class::<ratchet::BobSignalProtocolParameters>()?;
-    
-    // Sender keys module classes
-    module.add_class::<sender_keys::SenderKeyName>()?;
-    module.add_class::<sender_keys::SenderKeyRecord>()?;
-    
-    // Add classes from other modules as needed...
-    // You'll need to add similar lines for all other classes in your modules
-
     Ok(())
 }
