@@ -25,11 +25,14 @@ jobs:
     - name: Install test dependencies
       run: pip install mypy pytest
 
-    - name: Run tests with maturin
+    - name: Build and install for testing
       uses: PyO3/maturin-action@v1
       with:
-        command: test
-        args: --no-sdist
+        command: develop
+        args: --release
+
+    - name: Run pytest
+      run: pytest -v
 
     - name: Verify manual stub file exists
       run: |
