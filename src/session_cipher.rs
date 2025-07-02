@@ -87,16 +87,6 @@ pub fn message_decrypt_signal(
     Ok(PyBytes::new(py, &plaintext).into())
 }
 
-#[pymodule]
-fn session_cipher(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(message_encrypt, m)?)?;
-    m.add_function(wrap_pyfunction!(message_decrypt, m)?)?;
-    m.add_function(wrap_pyfunction!(message_decrypt_prekey, m)?)?;
-    m.add_function(wrap_pyfunction!(message_decrypt_signal, m)?)?;
-    Ok(())
-}
-
-// Keep this for backward compatibility during transition
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(message_encrypt, module)?)?;
     module.add_function(wrap_pyfunction!(message_decrypt, module)?)?;

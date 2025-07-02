@@ -321,17 +321,6 @@ impl SessionRecord {
 }
 
 /// UnacknowledgedPreKeyMessageItems is not exposed as part of the upstream public API.
-#[pymodule]
-fn state(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PreKeyBundle>()?;
-    m.add_class::<PreKeyRecord>()?;
-    m.add_class::<SessionRecord>()?;
-    m.add_class::<SignedPreKeyRecord>()?;
-    m.add_function(wrap_pyfunction!(generate_n_prekeys, m)?)?;
-    Ok(())
-}
-
-// Keep this for backward compatibility during transition
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PreKeyBundle>()?;
     module.add_class::<PreKeyRecord>()?;

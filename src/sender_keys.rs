@@ -116,14 +116,6 @@ impl SenderKeyRecord {
     }
 }
 
-#[pymodule]
-fn sender_keys(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<SenderKeyName>()?;
-    m.add_class::<SenderKeyRecord>()?;
-    Ok(())
-}
-
-// Keep this for backward compatibility during transition
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<SenderKeyName>()?;
     module.add_class::<SenderKeyRecord>()?;

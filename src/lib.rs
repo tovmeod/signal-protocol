@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::wrap_pyfunction;
+
 
 mod address;
 mod curve;
@@ -85,21 +85,7 @@ fn _signal_protocol(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()
     storage::init_submodule(&storage_submod)?;
     module.add_submodule(&storage_submod)?;
 
-    // Explicitly set each submodule as an attribute of the main module
-    module.setattr("address", address_submod)?;
-    module.setattr("curve", curve_submod)?;
-    module.setattr("error", error_submod)?;
-    module.setattr("fingerprint", fingerprint_submod)?;
-    module.setattr("group_cipher", group_cipher_submod)?;
-    module.setattr("identity_key", identity_key_submod)?;
-    module.setattr("protocol", protocol_submod)?;
-    module.setattr("ratchet", ratchet_submod)?;
-    module.setattr("sealed_sender", sealed_sender_submod)?;
-    module.setattr("sender_keys", sender_keys_submod)?;
-    module.setattr("session_cipher", session_cipher_submod)?;
-    module.setattr("session", session_submod)?;
-    module.setattr("state", state_submod)?;
-    module.setattr("storage", storage_submod)?;
+    
 
     Ok(())
 }

@@ -171,16 +171,6 @@ pub fn initialize_bob_session(parameters: &BobSignalProtocolParameters) -> Resul
 }
 
 /// fn are_we_alice, ChainKey, RootKey, MessageKey are not exposed as part of the Python API.
-#[pymodule]
-fn ratchet(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<AliceSignalProtocolParameters>()?;
-    m.add_class::<BobSignalProtocolParameters>()?;
-    m.add_function(wrap_pyfunction!(initialize_alice_session, m)?)?;
-    m.add_function(wrap_pyfunction!(initialize_bob_session, m)?)?;
-    Ok(())
-}
-
-// Keep this for backward compatibility during transition
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<AliceSignalProtocolParameters>()?;
     module.add_class::<BobSignalProtocolParameters>()?;
