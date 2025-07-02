@@ -97,7 +97,7 @@ fn _signal_protocol(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()
     let storage_submod = PyModule::new(py, "storage")?;
     storage::init_submodule(&storage_submod)?;
     module.add_submodule(&storage_submod)?;
-    module.setattr("storage", storage_submod)?;
+    
 
     Ok(())
 }
