@@ -30,6 +30,10 @@ class PersistentStorage(storage.PersistentStorageBase):
         """Load session for the given address name"""
         return self.sessions.get(address_name, None)
 
+    def contains_session(self, address_name: str) -> bool:
+        """Check if session exists for the given address name"""
+        return address_name in self.sessions
+
     # PreKey Store Methods
     def get_pre_key(self, pre_key_id: int) -> state.PreKeyRecord:
         """Get prekey by ID - raises KeyError if not found"""
