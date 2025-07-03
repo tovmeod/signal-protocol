@@ -1,10 +1,8 @@
 name: Build and Test
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
+    types: [opened, synchronize, reopened] # Trigger on PR creation, updates, and reopening
 
 jobs:
   build_and_test:
