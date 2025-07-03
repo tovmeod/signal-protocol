@@ -75,3 +75,31 @@ class PreKeyBundle(_PreKeyBundleImpl):
     def signed_pre_key_public(self) -> PublicKey: ...
     def signed_pre_key_signature(self) -> bytes: ...
     def identity_key(self) -> IdentityKey: ...
+
+def generate_n_prekeys(n: int, id: int) -> List[PreKeyRecord]:
+    """
+    Helper function for generating N prekeys.
+    Returns a list of PreKeyRecords.
+
+    Args:
+        n: Number of prekeys to generate
+        id: Starting prekey ID
+
+    Returns:
+        List of PreKeyRecord objects
+
+    Example:
+        >>> from signal_protocol import state
+        >>> prekeyid = 1
+        >>> manykeys = state.generate_n_prekeys(100, prekeyid)  # generates 100 keys
+    """
+    ...
+
+# And update the __all__ list to include it
+__all__ = [
+    "SessionRecord",
+    "PreKeyRecord",
+    "SignedPreKeyRecord",
+    "PreKeyBundle",
+    "generate_n_prekeys"  # ← Add this
+]
