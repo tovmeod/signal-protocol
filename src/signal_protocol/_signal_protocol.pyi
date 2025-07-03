@@ -294,6 +294,21 @@ class PersistentStorageBase:
     # Session store methods
     def store_session(self, address_name: str, session_record: SessionRecord) -> None: ...
     def load_session(self, address_name: str) -> Optional[SessionRecord]: ...
+    def contains_session(self, address_name: str) -> bool:
+        """
+        Check if session exists for the given address name.
+
+        This is a lightweight operation that can be optimized by subclasses
+        to avoid loading the full session data. The default implementation
+        uses load_session internally.
+
+        Args:
+            address_name: The formatted address string (name:device_id)
+
+        Returns:
+            True if session exists, False otherwise
+        """
+        ...
 
     # PreKey store methods
     def get_pre_key(self, pre_key_id: int) -> PreKeyRecord: ...
@@ -327,6 +342,21 @@ class InMemSignalProtocolStore:
     # Session store methods
     def load_session(self, address: ProtocolAddress) -> Optional[SessionRecord]: ...
     def store_session(self, address: ProtocolAddress, record: SessionRecord) -> None: ...
+    def contains_session(self, address: ProtocolAddress) -> bool:
+        """
+        Check if a session exists for the given address.
+
+        This is a lightweight operation that first checks the in-memory cache,
+        then falls back to persistent storage if available. Does not load
+        session data as a side effect.
+
+        Args:
+            address: The protocol address to check
+
+        Returns:
+            True if session exists in cache or persistent storage, False otherwise
+        """
+        ...
 
     # PreKey store methods
     def get_pre_key(self, id: int) -> PreKeyRecord: ...

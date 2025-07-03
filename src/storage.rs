@@ -294,6 +294,40 @@ impl InMemSignalProtocolStore {
         }
     }
 
+    /// Check if a session exists for the given address
+    /// This is a lightweight operation that doesn't load session data
+    fn contains_session(&self, address: &ProtocolAddress) -> Result<bool> {
+        // Check if session exists in cache first (lightweight check)
+        match block_on(self.store.load_session(&address.state, None)) {
+            Ok(cached) => {
+                if cached.is_some() {
+                    return Ok(true);
+                }
+            },
+            Err(_) => {
+                // Cache errors should not propagate - just fall through to persistent storage
+            }
+        }
+
+        // Fall back to persistent storage's contains_session (NOT load_session)
+        if let Some(ref py_storage) = self.py_storage {
+            Python::with_gil(|py| {
+                let py_address = format!("{}:{}", address.name(), address.device_id());
+                match py_storage.call_method1(py, "contains_session", (py_address,)) {
+                    Ok(result) => {
+                        match result.extract::<bool>(py) {
+                            Ok(exists) => Ok(exists),
+                            Err(_) => Ok(false) // Handle extraction errors gracefully
+                        }
+                    },
+                    Err(_) => Ok(false) // Handle Python call errors gracefully
+                }
+            })
+        } else {
+            Ok(false)
+        }
+    }
+
     // PreKey Store Methods
     fn get_pre_key(&self, id: PreKeyId) -> Result<PreKeyRecord> {
         // Try cache first
@@ -487,35 +521,6 @@ impl InMemSignalProtocolStore {
         }
     }
 
-    fn contains_session(&self, address: &ProtocolAddress) -> Result<bool> {
-        // Check if session exists in cache first
-        match block_on(self.store.load_session(&address.state, None)) {
-            Ok(cached) => {
-                if cached.is_some() {
-                    return Ok(true);
-                }
-            },
-            Err(_) => return Ok(false), // Handle errors gracefully
-        }
-
-        // Fall back to persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "contains_session", (py_address,)) {
-                    Ok(result) => {
-                        match result.extract::<bool>(py) {
-                            Ok(exists) => Ok(exists),
-                            Err(_) => Ok(false) // Handle extraction errors gracefully
-                        }
-                    },
-                    Err(_) => Ok(false) // Handle Python call errors gracefully
-                }
-            })
-        } else {
-            Ok(false)
-        }
-    }
 
     fn load_sender_key(
         &mut self,
