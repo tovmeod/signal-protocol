@@ -1,11 +1,3 @@
-# DEBUG PRINTS START
-import sys
-import os
-print(f"DEBUG: signal_protocol __init__.py loaded from: {__file__}")
-print(f"DEBUG: current working directory: {os.getcwd()}")
-print(f"DEBUG: sys.path: {sys.path}")
-# DEBUG PRINTS END
-
 # Import the compiled Rust extension module directly
 from . import _signal_protocol
 
