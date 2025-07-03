@@ -1,10 +1,10 @@
 # Typing stub for signal_protocol.error module
-# Re-export from the native _signal_protocol extension's error submodule
+# Direct class definition instead of type alias
 
-from ._signal_protocol import error as _error_impl
-from ._signal_protocol import SignalProtocolException as _SignalProtocolExceptionType
+from ._signal_protocol.error import SignalProtocolException as _SignalProtocolExceptionImpl
 
-# Explicitly re-export SignalProtocolException
-SignalProtocolException: type[_SignalProtocolExceptionType] = _error_impl.SignalProtocolException
+class SignalProtocolException(Exception, _SignalProtocolExceptionImpl):
+    """Base exception for Signal Protocol errors."""
+    ...
 
 __all__ = ["SignalProtocolException"]

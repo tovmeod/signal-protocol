@@ -1,8 +1,30 @@
 # Typing stub for signal_protocol.session_cipher module
-from ._signal_protocol import session_cipher as _session_cipher_impl
+# Direct function definitions instead of direct imports
+from typing import Union
 
-# Functions are directly attributes of the _session_cipher_impl object
-message_encrypt = _session_cipher_impl.message_encrypt
-message_decrypt = _session_cipher_impl.message_decrypt
+from ._signal_protocol.session_cipher import (
+    message_encrypt as _message_encrypt,
+    message_decrypt as _message_decrypt,
+)
+
+from .address import ProtocolAddress
+from .storage import InMemSignalProtocolStore
+from .protocol import CiphertextMessage, PreKeySignalMessage, SignalMessage
+
+def message_encrypt(
+    store: InMemSignalProtocolStore,
+    remote_address: ProtocolAddress,
+    message: bytes,
+) -> CiphertextMessage:
+    """Encrypt a message using Signal Protocol."""
+    ...
+
+def message_decrypt(
+    store: InMemSignalProtocolStore,
+    remote_address: ProtocolAddress,
+    message: Union[PreKeySignalMessage, SignalMessage],
+) -> bytes:
+    """Decrypt a message using Signal Protocol."""
+    ...
 
 __all__ = ["message_encrypt", "message_decrypt"]

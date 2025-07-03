@@ -1,7 +1,18 @@
 # Typing stub for signal_protocol.session module
-from ._signal_protocol import session as _session_impl
+# Direct function definition instead of direct import
 
-# Functions are directly attributes of the _session_impl object
-process_prekey_bundle = _session_impl.process_prekey_bundle
+from ._signal_protocol.session import process_prekey_bundle as _process_prekey_bundle
+
+from .address import ProtocolAddress
+from .storage import InMemSignalProtocolStore
+from .state import PreKeyBundle
+
+def process_prekey_bundle(
+    remote_address: ProtocolAddress,
+    session_store: InMemSignalProtocolStore,
+    prekey_bundle: PreKeyBundle,
+) -> None:
+    """Process a prekey bundle to establish a session."""
+    ...
 
 __all__ = ["process_prekey_bundle"]

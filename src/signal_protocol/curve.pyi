@@ -1,24 +1,57 @@
 # Typing stub for signal_protocol.curve module
-# Re-export from the native _signal_protocol extension's curve submodule
+# Direct class definitions instead of type aliases
+from typing import Tuple
 
-from ._signal_protocol import curve as _curve_impl
-from ._signal_protocol import (
-    KeyPair as _KeyPairType,
-    PublicKey as _PublicKeyType,
-    PrivateKey as _PrivateKeyType,
-    generate_keypair as _generate_keypair_func, # Assuming this is how top-level funcs are accessed if needed directly
-    verify_signature as _verify_signature_func,   # Or they are methods on _curve_impl
+from ._signal_protocol.curve import (
+    KeyPair as _KeyPairImpl,
+    PublicKey as _PublicKeyImpl,
+    PrivateKey as _PrivateKeyImpl,
+    generate_keypair as _generate_keypair,
+    verify_signature as _verify_signature,
 )
 
-# Classes
-KeyPair: type[_KeyPairType] = _curve_impl.KeyPair
-PublicKey: type[_PublicKeyType] = _curve_impl.PublicKey
-PrivateKey: type[_PrivateKeyType] = _curve_impl.PrivateKey
+class PublicKey(_PublicKeyImpl):
+    """A public key for cryptographic operations."""
 
-# Functions - assuming they are attributes of the curve submodule object
-generate_keypair = _curve_impl.generate_keypair
-verify_signature = _curve_impl.verify_signature
+    @staticmethod
+    def deserialize(key: bytes) -> 'PublicKey': ...
+    def serialize(self) -> bytes: ...
+    def verify_signature(self, message: bytes, signature: bytes) -> bool: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __ne__(self, other: object) -> bool: ...
 
+class PrivateKey(_PrivateKeyImpl):
+    """A private key for cryptographic operations."""
+
+    @staticmethod
+    def deserialize(key: bytes) -> 'PrivateKey': ...
+    def serialize(self) -> bytes: ...
+    def calculate_signature(self, message: bytes) -> bytes: ...
+    def calculate_agreement(self, their_key: PublicKey) -> bytes: ...
+    def public_key(self) -> PublicKey: ...
+
+class KeyPair(_KeyPairImpl):
+    """A public/private key pair for cryptographic operations."""
+
+    def __init__(self, public_key: PublicKey, private_key: PrivateKey) -> None: ...
+    @staticmethod
+    def generate() -> 'KeyPair': ...
+    @staticmethod
+    def from_public_and_private(public_key: bytes, private_key: bytes) -> 'KeyPair': ...
+    def public_key(self) -> PublicKey: ...
+    def private_key(self) -> PrivateKey: ...
+    def serialize(self) -> bytes: ...
+    def calculate_signature(self, message: bytes) -> bytes: ...
+    def calculate_agreement(self, their_key: PublicKey) -> bytes: ...
+
+# Functions
+def generate_keypair() -> Tuple[bytes, bytes]:
+    """Generate a new key pair and return as (public_key_bytes, private_key_bytes)."""
+    ...
+
+def verify_signature(public_key: PublicKey, message: bytes, signature: bytes) -> bool:
+    """Verify a signature using a public key."""
+    ...
 
 __all__ = [
     "KeyPair",

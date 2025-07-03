@@ -1,11 +1,38 @@
 # Typing stub for signal_protocol.identity_key module
-from ._signal_protocol import identity_key as _identity_key_impl
-from ._signal_protocol import (
-    IdentityKey as _IdentityKeyType,
-    IdentityKeyPair as _IdentityKeyPairType,
+# Direct class definitions instead of type aliases
+
+from ._signal_protocol.identity_key import (
+    IdentityKey as _IdentityKeyImpl,
+    IdentityKeyPair as _IdentityKeyPairImpl,
 )
 
-IdentityKey: type[_IdentityKeyType] = _identity_key_impl.IdentityKey
-IdentityKeyPair: type[_IdentityKeyPairType] = _identity_key_impl.IdentityKeyPair
+from .curve import PublicKey, PrivateKey
+
+class IdentityKey(_IdentityKeyImpl):
+    """An identity key representing a user's long-term identity."""
+
+    def __init__(self, public_key: bytes) -> None: ...
+    def public_key(self) -> PublicKey: ...
+    def serialize(self) -> bytes: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __ne__(self, other: object) -> bool: ...
+
+class IdentityKeyPair(_IdentityKeyPairImpl):
+    """A pair containing both identity key and its private key."""
+
+    def __init__(self, identity_key: IdentityKey, private_key: PrivateKey) -> None: ...
+
+    @staticmethod
+    def from_bytes(identity_key_pair_bytes: bytes) -> 'IdentityKeyPair': ...
+
+    @staticmethod
+    def generate() -> 'IdentityKeyPair':
+        """Generate a new random identity key pair."""
+        ...
+
+    def identity_key(self) -> IdentityKey: ...
+    def public_key(self) -> PublicKey: ...
+    def private_key(self) -> PrivateKey: ...
+    def serialize(self) -> bytes: ...
 
 __all__ = ["IdentityKey", "IdentityKeyPair"]

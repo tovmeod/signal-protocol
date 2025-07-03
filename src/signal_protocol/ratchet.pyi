@@ -1,7 +1,10 @@
 # Typing stub for signal_protocol.ratchet module
-from ._signal_protocol import ratchet as _ratchet_impl
-from ._signal_protocol import BobSignalProtocolParameters as _BobSignalProtocolParametersType
+# Direct class definition instead of type alias
 
-BobSignalProtocolParameters: type[_BobSignalProtocolParametersType] = _ratchet_impl.BobSignalProtocolParameters
+from ._signal_protocol.ratchet import BobSignalProtocolParameters as _BobSignalProtocolParametersImpl
+
+class BobSignalProtocolParameters(_BobSignalProtocolParametersImpl):
+    """Parameters for Bob's side of the Signal Protocol handshake."""
+    ...
 
 __all__ = ["BobSignalProtocolParameters"]

@@ -1,10 +1,15 @@
 # Typing stub for signal_protocol.address module
-# Re-export from the native _signal_protocol extension's address submodule
+# Direct class definition instead of type alias
 
-from ._signal_protocol import address as _address_impl
-from ._signal_protocol import ProtocolAddress as _ProtocolAddressType
+from ._signal_protocol.address import ProtocolAddress as _ProtocolAddressImpl
 
-# Explicitly re-export ProtocolAddress for clarity and direct import
-ProtocolAddress: type[_ProtocolAddressType] = _address_impl.ProtocolAddress
+class ProtocolAddress(_ProtocolAddressImpl):
+    """An address identifying a Signal Protocol participant."""
+
+    def __init__(self, name: str, device_id: int) -> None: ...
+    def name(self) -> str: ...
+    def device_id(self) -> int: ...
+    def __str__(self) -> str: ...
+    def __repr__(self) -> str: ...
 
 __all__ = ["ProtocolAddress"]

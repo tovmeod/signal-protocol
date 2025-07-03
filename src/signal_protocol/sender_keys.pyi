@@ -1,11 +1,28 @@
 # Typing stub for signal_protocol.sender_keys module
-from ._signal_protocol import sender_keys as _sender_keys_impl
-from ._signal_protocol import (
-    SenderKeyName as _SenderKeyNameType,
-    SenderKeyRecord as _SenderKeyRecordType,
+# Direct class definitions instead of type aliases
+
+from ._signal_protocol.sender_keys import (
+    SenderKeyName as _SenderKeyNameImpl,
+    SenderKeyRecord as _SenderKeyRecordImpl,
 )
 
-SenderKeyName: type[_SenderKeyNameType] = _sender_keys_impl.SenderKeyName
-SenderKeyRecord: type[_SenderKeyRecordType] = _sender_keys_impl.SenderKeyRecord
+from .address import ProtocolAddress
+
+class SenderKeyName(_SenderKeyNameImpl):
+    """Identifier for a sender key in group messaging."""
+
+    def __init__(self, group_id: str, sender: ProtocolAddress) -> None: ...
+    def group_id(self) -> str: ...
+    def sender(self) -> ProtocolAddress: ...
+
+class SenderKeyRecord(_SenderKeyRecordImpl):
+    """Record containing sender key information for group messaging."""
+
+    @staticmethod
+    def new_empty() -> 'SenderKeyRecord': ...
+    def is_empty(self) -> bool: ...
+    def serialize(self) -> bytes: ...
+    @staticmethod
+    def deserialize(data: bytes) -> 'SenderKeyRecord': ...
 
 __all__ = ["SenderKeyName", "SenderKeyRecord"]

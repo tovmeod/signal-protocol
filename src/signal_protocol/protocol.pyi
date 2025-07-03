@@ -1,16 +1,37 @@
 # Typing stub for signal_protocol.protocol module
-from ._signal_protocol import protocol as _protocol_impl
-from ._signal_protocol import (
-    CiphertextMessage as _CiphertextMessageType,
-    PreKeySignalMessage as _PreKeySignalMessageType,
-    SignalMessage as _SignalMessageType,
-    SenderKeyDistributionMessage as _SenderKeyDistributionMessageType,
+# Direct class definitions instead of type aliases
+
+from ._signal_protocol.protocol import (
+    CiphertextMessage as _CiphertextMessageImpl,
+    PreKeySignalMessage as _PreKeySignalMessageImpl,
+    SignalMessage as _SignalMessageImpl,
+    SenderKeyDistributionMessage as _SenderKeyDistributionMessageImpl,
 )
 
-CiphertextMessage: type[_CiphertextMessageType] = _protocol_impl.CiphertextMessage
-PreKeySignalMessage: type[_PreKeySignalMessageType] = _protocol_impl.PreKeySignalMessage
-SignalMessage: type[_SignalMessageType] = _protocol_impl.SignalMessage
-SenderKeyDistributionMessage: type[_SenderKeyDistributionMessageType] = _protocol_impl.SenderKeyDistributionMessage
+class CiphertextMessage(_CiphertextMessageImpl):
+    """Base class for encrypted messages."""
+
+    def message_type(self) -> int: ...
+    def serialize(self) -> bytes: ...
+
+class PreKeySignalMessage(_PreKeySignalMessageImpl):
+    """Message containing a pre-key Signal message."""
+
+    @staticmethod
+    def try_from(data: bytes) -> 'PreKeySignalMessage': ...
+
+class SignalMessage(_SignalMessageImpl):
+    """Regular Signal message (non-prekey)."""
+
+    @staticmethod
+    def try_from(data: bytes) -> 'SignalMessage': ...
+
+class SenderKeyDistributionMessage(_SenderKeyDistributionMessageImpl):
+    """Message for distributing sender keys in group messaging."""
+
+    @staticmethod
+    def try_from(data: bytes) -> 'SenderKeyDistributionMessage': ...
+    def serialized(self) -> bytes: ...
 
 __all__ = [
     "CiphertextMessage",
