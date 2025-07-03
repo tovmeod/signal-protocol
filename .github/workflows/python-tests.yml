@@ -35,30 +35,29 @@ jobs:
 
     - name: Run pytest
       run: |
-        python -c "
-        import sys
-        import os
-        # Remove current directory from the front of sys.path
-        current_dir = os.getcwd()
-        if current_dir in sys.path:
-            sys.path.remove(current_dir)
-        # Add it to the end so site-packages takes priority
-        sys.path.append(current_dir)
-        # Now run pytest
-        import pytest
-        pytest.main(['-v', 'tests/'])
-        "
+        python -m pytest tests/ -v
 
     - name: Verify manual stub file exists
       run: |
-        # Check that the manually created stub file is present
-        ls -la signal_protocol/_signal_protocol.pyi
-        echo "Manual stub file found and will be used for type checking"
+        # Check that the manually created stub file is present in the installed package
+        python -c "
+        import signal_protocol
+        import os
+        print('Package location:', signal_protocol.__file__)
+        pyi_file = os.path.join(os.path.dirname(signal_protocol.__file__), '_signal_protocol.pyi')
+        print('Stub file exists:', os.path.exists(pyi_file))
+        "
 
     - name: Validate type stubs with mypy
       run: |
         # Type check the stub file itself
-        python -m mypy signal_protocol/_signal_protocol.pyi --ignore-missing-imports
+        python -c "
+        import signal_protocol
+        import os
+        pyi_file = os.path.join(os.path.dirname(signal_protocol.__file__), '_signal_protocol.pyi')
+        print('Type checking:', pyi_file)
+        "
+        python -m mypy --python-executable python -c "import signal_protocol" --ignore-missing-imports
         echo "Type stub validation successful"
 
     - name: Type check test files (optional)

@@ -11,12 +11,15 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
+
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "signal_protocol._signal_protocol"
+# Enable src layout
+python-source = "src"
 # Include Python files (including .pyi stub files)
 include = [
-    { path = "signal_protocol/__init__.py", format = "wheel" },
-    { path = "signal_protocol/_signal_protocol.pyi", format = "wheel" },
-    { path = "signal_protocol/py.typed", format = "wheel" }
+    { path = "src/signal_protocol/__init__.py", format = "wheel" },
+    { path = "src/signal_protocol/_signal_protocol.pyi", format = "wheel" },
+    { path = "src/signal_protocol/py.typed", format = "wheel" }
 ]
