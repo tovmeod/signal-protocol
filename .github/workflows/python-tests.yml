@@ -35,8 +35,19 @@ jobs:
 
     - name: Run pytest
       run: |
-        # Remove current directory from Python path and run pytest
-        python -c "import sys; sys.path.remove(''); import pytest; pytest.main(['-v', 'tests/'])"
+        python -c "
+        import sys
+        import os
+        # Remove current directory from the front of sys.path
+        current_dir = os.getcwd()
+        if current_dir in sys.path:
+            sys.path.remove(current_dir)
+        # Add it to the end so site-packages takes priority
+        sys.path.append(current_dir)
+        # Now run pytest
+        import pytest
+        pytest.main(['-v', 'tests/'])
+        "
 
     - name: Verify manual stub file exists
       run: |
