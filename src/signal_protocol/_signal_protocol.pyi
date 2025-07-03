@@ -13,7 +13,7 @@ else:
     from typing_extensions import Literal
 
 # Exception Classes
-class SignalProtocolError(Exception):
+class SignalProtocolException(Exception):
     """Base exception for Signal Protocol errors."""
     ...
 
@@ -422,7 +422,7 @@ class CurveModule:
     verify_signature: type[verify_signature]
 
 class ErrorModule:
-    SignalProtocolError: type[SignalProtocolError]
+    SignalProtocolException: type[SignalProtocolException]
 
 class FingerprintModule:
     Fingerprint: type[Fingerprint]
