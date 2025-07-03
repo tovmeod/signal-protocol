@@ -25,18 +25,6 @@ impl PersistentStorageBase {
     }
 
     // Identity Store Methods
-    fn get_identity_key_pair(&self) -> PyResult<IdentityKeyPair> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "get_identity_key_pair must be implemented by subclass"
-        ))
-    }
-
-    fn get_local_registration_id(&self) -> PyResult<u32> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "get_local_registration_id must be implemented by subclass"
-        ))
-    }
-
     fn save_identity(&self, _address_name: String, _identity_key: &IdentityKey) -> PyResult<bool> {
         Err(pyo3::exceptions::PyNotImplementedError::new_err(
             "save_identity must be implemented by subclass"
