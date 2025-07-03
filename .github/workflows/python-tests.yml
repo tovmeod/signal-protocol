@@ -35,8 +35,6 @@ jobs:
 
     - name: Run pytest
       run: pytest -v
-      env:
-        PYTHONPATH: ${{ github.workspace }}/signal_protocol
 
     - name: Verify manual stub file exists
       run: |
