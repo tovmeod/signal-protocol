@@ -31,8 +31,34 @@ jobs:
         pip install dist/*.whl
         pip install mypy pytest
 
+    - name: Isolate installed package for testing
+      run: |
+        echo "Moving signal_protocol source directory to avoid import conflict"
+        mv signal_protocol signal_protocol_source_tmp
+        echo "Contents of workspace after move:"
+        ls -la
+
     - name: Run pytest
-      run: pytest -v
+      id: pytest_run # Added id here
+      run: pytest -v signal_protocol_source_tmp/tests
+      # Continue on error to ensure cleanup step runs
+      continue-on-error: true
+
+    - name: Check pytest exit code
+      run: |
+        if [ "${{ steps.pytest_run.outcome }}" == "failure" ]; then
+          echo "Pytest failed"
+          exit 1
+        fi
+
+    - name: Restore source directory
+      # Always run this step to ensure cleanup, even if pytest failed
+      if: always()
+      run: |
+        echo "Restoring signal_protocol source directory"
+        mv signal_protocol_source_tmp signal_protocol
+        echo "Contents of workspace after restore:"
+        ls -la
 
     - name: Verify manual stub file exists
       run: |
