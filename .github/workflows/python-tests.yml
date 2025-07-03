@@ -34,9 +34,9 @@ jobs:
         pip install mypy pytest
 
     - name: Run pytest
-      run: pytest -v
-      env:
-        PYTHONPATH: ${{ github.workspace }}/signal_protocol
+      run: |
+        # Remove current directory from Python path and run pytest
+        python -c "import sys; sys.path.remove(''); import pytest; pytest.main(['-v', 'tests/'])"
 
     - name: Verify manual stub file exists
       run: |
