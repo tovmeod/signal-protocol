@@ -426,8 +426,6 @@ impl SenderKeyDistributionMessage {
     }
 }
 
-/// CiphertextMessageType is an Enum that is not exposed as part
-/// of the Python API.
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<CiphertextMessage>()?;
     module.add_class::<PreKeySignalMessage>()?;

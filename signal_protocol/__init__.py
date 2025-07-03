@@ -1,4 +1,3 @@
-
 # Import the compiled Rust extension module directly
 from . import _signal_protocol
 

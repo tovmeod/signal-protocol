@@ -56,11 +56,6 @@ impl Fingerprint {
     }
 }
 
-/// Instead of DisplayableFingerprint, ScannableFingerprint, and Fingerprint, we
-/// just expose Fingerprint, with the relevant methods on the DisplayableFingerprint
-/// and ScannableFingerprint implemented on the Fingerprint directly.
-///
-/// ScannableFingerprint::deserialize() is not implemented.
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Fingerprint>()?;
     Ok(())

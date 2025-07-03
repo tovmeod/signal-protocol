@@ -1,6 +1,7 @@
+#![allow(dead_code)]
+
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::wrap_pyfunction;
 
 use crate::curve::{KeyPair, PrivateKey, PublicKey};
 use crate::error::{Result, SignalProtocolError};
@@ -320,12 +321,11 @@ impl SessionRecord {
     }
 }
 
-/// UnacknowledgedPreKeyMessageItems is not exposed as part of the upstream public API.
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PreKeyBundle>()?;
     module.add_class::<PreKeyRecord>()?;
-    module.add_class::<SessionRecord>()?;
     module.add_class::<SignedPreKeyRecord>()?;
+    module.add_class::<SessionRecord>()?;
     module.add_function(wrap_pyfunction!(generate_n_prekeys, module)?)?;
     Ok(())
 }

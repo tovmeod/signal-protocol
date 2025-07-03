@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::address::ProtocolAddress;
 use crate::curve::{PrivateKey, PublicKey};
 use crate::error::{Result, SignalProtocolError};
@@ -6,7 +8,6 @@ use crate::storage::InMemSignalProtocolStore;
 use futures::executor::block_on;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::wrap_pyfunction;
 
 use rand::rngs::OsRng;
 

@@ -1,6 +1,7 @@
+#![allow(dead_code)]
+
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::wrap_pyfunction;
 
 use futures::executor::block_on;
 use rand::rngs::OsRng;

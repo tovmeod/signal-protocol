@@ -4,7 +4,6 @@
 #    maturin generate-ci github
 #
 name: CI
-
 on:
   push:
     branches:

@@ -167,7 +167,7 @@ impl InMemSignalProtocolStore {
             &identity.key,
             None,
         ))?;
-        
+
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
@@ -189,7 +189,7 @@ impl InMemSignalProtocolStore {
     fn get_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>> {
         // Try cache first
         let cached = block_on(self.store.identity_store.get_identity(&address.state, None))?;
-        
+
         if cached.is_some() {
             return Ok(cached.map(|key| IdentityKey { key }));
         }
@@ -233,7 +233,7 @@ impl InMemSignalProtocolStore {
     pub fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>> {
         // Try cache first
         let cached = block_on(self.store.load_session(&address.state, None))?;
-        
+
         if cached.is_some() {
             return Ok(cached.map(|state| SessionRecord { state }));
         }
@@ -279,7 +279,7 @@ impl InMemSignalProtocolStore {
             self.store
                 .store_session(&address.state, &record.state, None),
         )?;
-        
+
         // Also store in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
@@ -347,7 +347,7 @@ impl InMemSignalProtocolStore {
                 .pre_key_store
                 .save_pre_key(id, &record.state, None),
         )?;
-        
+
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
@@ -368,7 +368,7 @@ impl InMemSignalProtocolStore {
     fn remove_pre_key(&mut self, id: PreKeyId) -> Result<()> {
         // Remove from cache
         block_on(self.store.pre_key_store.remove_pre_key(id, None))?;
-        
+
         // Also remove from persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
@@ -438,7 +438,7 @@ impl InMemSignalProtocolStore {
             self.store
                 .save_signed_pre_key(id, &record.state.to_owned(), None),
         )?;
-        
+
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
@@ -468,7 +468,7 @@ impl InMemSignalProtocolStore {
             &record.state,
             None,
         ))?;
-        
+
         // Also store in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
@@ -497,7 +497,7 @@ impl InMemSignalProtocolStore {
     ) -> Result<Option<SenderKeyRecord>> {
         // Try cache first
         let cached = block_on(self.store.load_sender_key(&sender_key_name.state, None))?;
-        
+
         if cached.is_some() {
             return Ok(cached.map(|state| SenderKeyRecord { state }));
         }
@@ -542,11 +542,6 @@ impl InMemSignalProtocolStore {
     }
 }
 
-/// The storage traits are not exposed as part of the API (this is not supported by Pyo3)
-///
-/// Python classes for InMemSenderKeyStore, InMemSessionStore, InMemIdentityKeyStore, InMemPreKeyStore
-/// or InMemSignedPreKeyStore are not exposed.
-/// One will need to operate on the InMemSignalProtocolStore instead.
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PersistentStorageBase>()?;
     module.add_class::<InMemSignalProtocolStore>()?;

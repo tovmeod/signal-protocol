@@ -2,7 +2,7 @@ use pyo3::exceptions;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use pyo3::basic::CompareOp;
-use pyo3::wrap_pyfunction;
+
 
 use rand::rngs::OsRng;
 
@@ -165,7 +165,6 @@ pub fn verify_signature(public_key: &PublicKey, message: &[u8], signature: &[u8]
     Ok(public_key.verify_signature(message, signature)?)
 }
 
-/// KeyType is not exposed as part of the Python API.
 pub fn init_curve_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<KeyPair>()?;
     module.add_class::<PublicKey>()?;

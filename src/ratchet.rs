@@ -1,5 +1,6 @@
+#![allow(dead_code)]
+
 use pyo3::prelude::*;
-use pyo3::wrap_pyfunction;
 
 use rand::rngs::OsRng;
 
@@ -170,7 +171,6 @@ pub fn initialize_bob_session(parameters: &BobSignalProtocolParameters) -> Resul
     Ok(SessionRecord { state })
 }
 
-/// fn are_we_alice, ChainKey, RootKey, MessageKey are not exposed as part of the Python API.
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<AliceSignalProtocolParameters>()?;
     module.add_class::<BobSignalProtocolParameters>()?;

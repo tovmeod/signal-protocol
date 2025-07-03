@@ -1,4 +1,6 @@
 use pyo3::prelude::*;
+use pyo3::types::PyModule;
+use pyo3::BoundObject;
 
 
 mod address;
@@ -28,76 +30,62 @@ mod storage;
 /// We do not expose a Python submodule for HKDF (a module in the upstream crate).
 #[pymodule]
 fn _signal_protocol(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
-    // Add submodules first
-    let address_submod = PyModule::new(py, "address")?;
-    address::init_submodule(&address_submod)?;
-    module.add_submodule(&address_submod)?;
-    module.setattr("address", address_submod)?;
+    // Create and initialize submodules
+    let address_module = PyModule::new(py, "address")?;
+    address::init_submodule(&address_module.clone().into_bound())?;
+    module.add("address", address_module)?;
 
-    let curve_submod = PyModule::new(py, "curve")?;
-    curve::init_curve_submodule(&curve_submod)?;
-    module.add_submodule(&curve_submod)?;
-    module.setattr("curve", curve_submod)?;
+    let curve_module = PyModule::new(py, "curve")?;
+    curve::init_curve_submodule(&curve_module.clone().into_bound())?;
+    module.add("curve", curve_module)?;
 
-    let error_submod = PyModule::new(py, "error")?;
-    error::init_submodule(py, &error_submod)?;
-    module.add_submodule(&error_submod)?;
-    module.setattr("error", error_submod)?;
+    let error_module = PyModule::new(py, "error")?;
+    error::init_submodule(py, &error_module.clone().into_bound())?;
+    module.add("error", error_module)?;
 
-    let fingerprint_submod = PyModule::new(py, "fingerprint")?;
-    fingerprint::init_submodule(&fingerprint_submod)?;
-    module.add_submodule(&fingerprint_submod)?;
-    module.setattr("fingerprint", fingerprint_submod)?;
+    let fingerprint_module = PyModule::new(py, "fingerprint")?;
+    fingerprint::init_submodule(&fingerprint_module.clone().into_bound())?;
+    module.add("fingerprint", fingerprint_module)?;
 
-    let group_cipher_submod = PyModule::new(py, "group_cipher")?;
-    group_cipher::init_submodule(&group_cipher_submod)?;
-    module.add_submodule(&group_cipher_submod)?;
-    module.setattr("group_cipher", group_cipher_submod)?;
+    let group_cipher_module = PyModule::new(py, "group_cipher")?;
+    group_cipher::init_submodule(&group_cipher_module.clone().into_bound())?;
+    module.add("group_cipher", group_cipher_module)?;
 
-    let identity_key_submod = PyModule::new(py, "identity_key")?;
-    identity_key::init_submodule(&identity_key_submod)?;
-    module.add_submodule(&identity_key_submod)?;
-    module.setattr("identity_key", identity_key_submod)?;
+    let identity_key_module = PyModule::new(py, "identity_key")?;
+    identity_key::init_submodule(&identity_key_module.clone().into_bound())?;
+    module.add("identity_key", identity_key_module)?;
 
-    let protocol_submod = PyModule::new(py, "protocol")?;
-    protocol::init_submodule(&protocol_submod)?;
-    module.add_submodule(&protocol_submod)?;
-    module.setattr("protocol", protocol_submod)?;
+    let protocol_module = PyModule::new(py, "protocol")?;
+    protocol::init_submodule(&protocol_module.clone().into_bound())?;
+    module.add("protocol", protocol_module)?;
 
-    let ratchet_submod = PyModule::new(py, "ratchet")?;
-    ratchet::init_submodule(&ratchet_submod)?;
-    module.add_submodule(&ratchet_submod)?;
-    module.setattr("ratchet", ratchet_submod)?;
+    let ratchet_module = PyModule::new(py, "ratchet")?;
+    ratchet::init_submodule(&ratchet_module.clone().into_bound())?;
+    module.add("ratchet", ratchet_module)?;
 
-    let sealed_sender_submod = PyModule::new(py, "sealed_sender")?;
-    sealed_sender::init_submodule(&sealed_sender_submod)?;
-    module.add_submodule(&sealed_sender_submod)?;
-    module.setattr("sealed_sender", sealed_sender_submod)?;
+    let sealed_sender_module = PyModule::new(py, "sealed_sender")?;
+    sealed_sender::init_submodule(&sealed_sender_module.clone().into_bound())?;
+    module.add("sealed_sender", sealed_sender_module)?;
 
-    let sender_keys_submod = PyModule::new(py, "sender_keys")?;
-    sender_keys::init_submodule(&sender_keys_submod)?;
-    module.add_submodule(&sender_keys_submod)?;
-    module.setattr("sender_keys", sender_keys_submod)?;
+    let sender_keys_module = PyModule::new(py, "sender_keys")?;
+    sender_keys::init_submodule(&sender_keys_module.clone().into_bound())?;
+    module.add("sender_keys", sender_keys_module)?;
 
-    let session_cipher_submod = PyModule::new(py, "session_cipher")?;
-    session_cipher::init_submodule(&session_cipher_submod)?;
-    module.add_submodule(&session_cipher_submod)?;
-    module.setattr("session_cipher", session_cipher_submod)?;
+    let session_module = PyModule::new(py, "session")?;
+    session::init_submodule(&session_module.clone().into_bound())?;
+    module.add("session", session_module)?;
 
-    let session_submod = PyModule::new(py, "session")?;
-    session::init_submodule(&session_submod)?;
-    module.add_submodule(&session_submod)?;
-    module.setattr("session", session_submod)?;
+    let session_cipher_module = PyModule::new(py, "session_cipher")?;
+    session_cipher::init_submodule(&session_cipher_module.clone().into_bound())?;
+    module.add("session_cipher", session_cipher_module)?;
 
-    let state_submod = PyModule::new(py, "state")?;
-    state::init_submodule(&state_submod)?;
-    module.add_submodule(&state_submod)?;
-    module.setattr("state", state_submod)?;
+    let state_module = PyModule::new(py, "state")?;
+    state::init_submodule(&state_module.clone().into_bound())?;
+    module.add("state", state_module)?;
 
-    let storage_submod = PyModule::new(py, "storage")?;
-    storage::init_submodule(&storage_submod)?;
-    module.add_submodule(&storage_submod)?;
-    
+    let storage_module = PyModule::new(py, "storage")?;
+    storage::init_submodule(&storage_module.clone().into_bound())?;
+    module.add("storage", storage_module)?;
 
     Ok(())
 }
