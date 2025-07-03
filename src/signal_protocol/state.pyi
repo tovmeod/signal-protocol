@@ -45,17 +45,33 @@ class PreKeyBundle(_PreKeyBundleImpl):
         self,
         registration_id: int,
         device_id: int,
-        prekey_id: int,
-        prekey: PublicKey,
-        signed_prekey_id: int,
-        signed_prekey: PublicKey,
-        signed_prekey_signature: bytes,
+        pre_key_id: Optional[int],
+        pre_key_public: Optional[PublicKey],
+        signed_pre_key_id: int,
+        signed_pre_key_public: PublicKey,
+        signed_pre_key_signature: bytes,
         identity_key: IdentityKey,
-    ) -> None: ...
+    ) -> None:
+        """
+        Create a new PreKeyBundle.
 
-__all__ = [
-    "SessionRecord",
-    "PreKeyRecord",
-    "SignedPreKeyRecord",
-    "PreKeyBundle",
-]
+        Args:
+            registration_id: Registration ID of the remote client
+            device_id: Device ID of the remote client
+            pre_key_id: ID of the one-time pre-key (None if no pre-key available)
+            pre_key_public: Public component of one-time pre-key (None if no pre-key available)
+            signed_pre_key_id: ID of the signed pre-key
+            signed_pre_key_public: Public component of signed pre-key
+            signed_pre_key_signature: Signature of the signed pre-key
+            identity_key: Identity key of the remote client
+        """
+        ...
+
+    def registration_id(self) -> int: ...
+    def device_id(self) -> int: ...
+    def pre_key_id(self) -> Optional[int]: ...
+    def pre_key_public(self) -> Optional[PublicKey]: ...
+    def signed_pre_key_id(self) -> int: ...
+    def signed_pre_key_public(self) -> PublicKey: ...
+    def signed_pre_key_signature(self) -> bytes: ...
+    def identity_key(self) -> IdentityKey: ...
