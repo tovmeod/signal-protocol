@@ -25,34 +25,34 @@ impl PersistentStorageBase {
     }
 
     // Identity Store Methods
-    fn save_identity(&self, _address_name: String, _identity_key: &IdentityKey) -> PyResult<bool> {
+    fn save_identity(&self, _address: &ProtocolAddress, _identity_key: &IdentityKey) -> PyResult<bool> {
         Err(pyo3::exceptions::PyNotImplementedError::new_err(
             "save_identity must be implemented by subclass"
         ))
     }
 
-    fn get_identity(&self, _address_name: String) -> PyResult<Option<IdentityKey>> {
+    fn get_identity(&self, _address: &ProtocolAddress) -> PyResult<Option<IdentityKey>> {
         Err(pyo3::exceptions::PyNotImplementedError::new_err(
             "get_identity must be implemented by subclass"
         ))
     }
 
     // Session Store Methods
-    fn store_session(&self, _address_name: String, _session_record: &SessionRecord) -> PyResult<()> {
+    fn store_session(&self, _address: &ProtocolAddress, _session_record: &SessionRecord) -> PyResult<()> {
         Err(pyo3::exceptions::PyNotImplementedError::new_err(
             "store_session must be implemented by subclass"
         ))
     }
 
-    fn load_session(&self, _address_name: String) -> PyResult<Option<SessionRecord>> {
+    fn load_session(&self, _address: &ProtocolAddress) -> PyResult<Option<SessionRecord>> {
         Err(pyo3::exceptions::PyNotImplementedError::new_err(
             "load_session must be implemented by subclass"
         ))
     }
 
-    fn contains_session(&self, address_name: String) -> PyResult<bool> {
+    fn contains_session(&self, address: &ProtocolAddress) -> PyResult<bool> {
         // Default implementation that uses load_session
-        match self.load_session(address_name) {
+        match self.load_session(address) {
             Ok(session) => Ok(session.is_some()),
             Err(_) => Ok(false) // Handle errors gracefully
         }
@@ -91,13 +91,13 @@ impl PersistentStorageBase {
     }
 
     // Sender Key Store Methods
-    fn store_sender_key(&self, _sender_key_name: String, _sender_key_record: &SenderKeyRecord) -> PyResult<()> {
+    fn store_sender_key(&self, _sender_key_name: &SenderKeyName, _sender_key_record: &SenderKeyRecord) -> PyResult<()> {
         Err(pyo3::exceptions::PyNotImplementedError::new_err(
             "store_sender_key must be implemented by subclass"
         ))
     }
 
-    fn load_sender_key(&self, _sender_key_name: String) -> PyResult<Option<SenderKeyRecord>> {
+    fn load_sender_key(&self, _sender_key_name: &SenderKeyName) -> PyResult<Option<SenderKeyRecord>> {
         Err(pyo3::exceptions::PyNotImplementedError::new_err(
             "load_sender_key must be implemented by subclass"
         ))
@@ -167,8 +167,7 @@ impl InMemSignalProtocolStore {
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "save_identity", (py_address, identity.clone())) {
+                match py_storage.call_method1(py, "save_identity", (address.clone(), identity.clone())) {
                     Ok(_) => Ok(cached_result),
                     Err(err) => Err(SignalProtocolError::from(
                         libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
@@ -193,8 +192,7 @@ impl InMemSignalProtocolStore {
         // Fall back to persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "get_identity", (py_address,)) {
+                match py_storage.call_method1(py, "get_identity", (address.clone(),)) {
                     Ok(result) => {
                         match result.extract::<Option<IdentityKey>>(py) {
                             Ok(identity) => {
@@ -237,8 +235,7 @@ impl InMemSignalProtocolStore {
         // Fall back to persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "load_session", (py_address,)) {
+                match py_storage.call_method1(py, "load_session", (address.clone(),)) {
                     Ok(result) => {
                         match result.extract::<Option<SessionRecord>>(py) {
                             Ok(session) => {
@@ -279,8 +276,7 @@ impl InMemSignalProtocolStore {
         // Also store in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "store_session", (py_address, record.clone())) {
+                match py_storage.call_method1(py, "store_session", (address.clone(), record.clone())) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(SignalProtocolError::from(
                         libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
@@ -312,8 +308,7 @@ impl InMemSignalProtocolStore {
         // Fall back to persistent storage's contains_session (NOT load_session)
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "contains_session", (py_address,)) {
+                match py_storage.call_method1(py, "contains_session", (address.clone(),)) {
                     Ok(result) => {
                         match result.extract::<bool>(py) {
                             Ok(exists) => Ok(exists),
@@ -502,12 +497,7 @@ impl InMemSignalProtocolStore {
         // Also store in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
-                let group_id = sender_key_name.group_id().unwrap_or_else(|_| "unknown".to_string());
-                let sender_addr = sender_key_name.sender().unwrap_or_else(|_| {
-                    ProtocolAddress { state: libsignal_protocol_rust::ProtocolAddress::new("unknown".to_string(), 0) }
-                });
-                let key_name = format!("{}:{}", group_id, format!("{}:{}", sender_addr.name(), sender_addr.device_id()));
-                match py_storage.call_method1(py, "store_sender_key", (key_name, record.clone())) {
+                match py_storage.call_method1(py, "store_sender_key", (sender_key_name.clone(), record.clone())) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(SignalProtocolError::from(
                         libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
@@ -536,12 +526,7 @@ impl InMemSignalProtocolStore {
         // Fall back to persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
             Python::with_gil(|py| {
-                let group_id = sender_key_name.group_id().unwrap_or_else(|_| "unknown".to_string());
-                let sender_addr = sender_key_name.sender().unwrap_or_else(|_| {
-                    ProtocolAddress { state: libsignal_protocol_rust::ProtocolAddress::new("unknown".to_string(), 0) }
-                });
-                let key_name = format!("{}:{}", group_id, format!("{}:{}", sender_addr.name(), sender_addr.device_id()));
-                match py_storage.call_method1(py, "load_sender_key", (key_name,)) {
+                match py_storage.call_method1(py, "load_sender_key", (sender_key_name.clone(),)) {
                     Ok(result) => {
                         match result.extract::<Option<SenderKeyRecord>>(py) {
                             Ok(record) => {

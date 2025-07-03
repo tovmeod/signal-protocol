@@ -12,27 +12,32 @@ class PersistentStorage(storage.PersistentStorageBase):
         self.sender_keys: Dict[str, sender_keys.SenderKeyRecord] = {}
 
     # Identity Store Methods
-    def save_identity(self, address_name: str, identity_key: identity_key.IdentityKey) -> bool:
-        """Save identity for the given address name"""
-        self.identities[address_name] = identity_key
+    def save_identity(self, address: address.ProtocolAddress, identity_key: identity_key.IdentityKey) -> bool:
+        """Save identity for the given address"""
+        address_key = f"{address.name()}:{address.device_id()}"
+        self.identities[address_key] = identity_key
         return True
 
-    def get_identity(self, address_name: str) -> Optional[identity_key.IdentityKey]:
-        """Get identity for the given address name"""
-        return self.identities.get(address_name, None)
+    def get_identity(self, address: address.ProtocolAddress) -> Optional[identity_key.IdentityKey]:
+        """Get identity for the given address"""
+        address_key = f"{address.name()}:{address.device_id()}"
+        return self.identities.get(address_key, None)
 
     # Session Store Methods
-    def store_session(self, address_name: str, session_record: state.SessionRecord) -> None:
-        """Store session for the given address name"""
-        self.sessions[address_name] = session_record
+    def store_session(self, address: address.ProtocolAddress, session_record: state.SessionRecord) -> None:
+        """Store session for the given address"""
+        address_key = f"{address.name()}:{address.device_id()}"
+        self.sessions[address_key] = session_record
 
-    def load_session(self, address_name: str) -> Optional[state.SessionRecord]:
-        """Load session for the given address name"""
-        return self.sessions.get(address_name, None)
+    def load_session(self, address: address.ProtocolAddress) -> Optional[state.SessionRecord]:
+        """Load session for the given address"""
+        address_key = f"{address.name()}:{address.device_id()}"
+        return self.sessions.get(address_key, None)
 
-    def contains_session(self, address_name: str) -> bool:
-        """Check if session exists for the given address name"""
-        return address_name in self.sessions
+    def contains_session(self, address: address.ProtocolAddress) -> bool:
+        """Check if session exists for the given address"""
+        address_key = f"{address.name()}:{address.device_id()}"
+        return address_key in self.sessions
 
     # PreKey Store Methods
     def get_pre_key(self, pre_key_id: int) -> state.PreKeyRecord:
@@ -62,13 +67,21 @@ class PersistentStorage(storage.PersistentStorageBase):
         self.signed_pre_keys[signed_pre_key_id] = signed_pre_key_record
 
     # Sender Key Store Methods
-    def store_sender_key(self, sender_key_name: str, sender_key_record: sender_keys.SenderKeyRecord) -> None:
+    def store_sender_key(self, sender_key_name: sender_keys.SenderKeyName, sender_key_record: sender_keys.SenderKeyRecord) -> None:
         """Store sender key record with given name"""
-        self.sender_keys[sender_key_name] = sender_key_record
+        # Convert SenderKeyName to a string key for storage
+        group_id = sender_key_name.group_id()
+        sender = sender_key_name.sender()
+        key = f"{group_id}:{sender.name()}:{sender.device_id()}"
+        self.sender_keys[key] = sender_key_record
 
-    def load_sender_key(self, sender_key_name: str) -> Optional[sender_keys.SenderKeyRecord]:
+    def load_sender_key(self, sender_key_name: sender_keys.SenderKeyName) -> Optional[sender_keys.SenderKeyRecord]:
         """Load sender key by name"""
-        return self.sender_keys.get(sender_key_name, None)
+        # Convert SenderKeyName to a string key for lookup
+        group_id = sender_key_name.group_id()
+        sender = sender_key_name.sender()
+        key = f"{group_id}:{sender.name()}:{sender.device_id()}"
+        return self.sender_keys.get(key, None)
 
     # Utility methods for testing
     def clear_all(self) -> None:

@@ -244,12 +244,12 @@ class TestPersistentStorageContainsSession:
         address_str = f"{protocol_address.name()}:{protocol_address.device_id()}"
 
         # Test: When session doesn't exist
-        result = persistent_storage.contains_session(address_str)
+        result = persistent_storage.contains_session(protocol_address)
         assert result is False
 
         # Test: Add session and test again
         persistent_storage.sessions[address_str] = session_record
-        result = persistent_storage.contains_session(address_str)
+        result = persistent_storage.contains_session(protocol_address)
         assert result is True
 
         # Test: Verify it's using optimized path (not load_session)

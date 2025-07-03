@@ -15,21 +15,21 @@ class SpiedPersistentStorage(PersistentStorage):
         super().__init__()
         self.call_log = []
 
-    def save_identity(self, address_name, identity_key_obj):
-        self.call_log.append(("save_identity", address_name, identity_key_obj))
-        return super().save_identity(address_name, identity_key_obj)
+    def save_identity(self, address, identity_key_obj):
+        self.call_log.append(("save_identity", address, identity_key_obj))
+        return super().save_identity(address, identity_key_obj)
 
-    def get_identity(self, address_name):
-        self.call_log.append(("get_identity", address_name))
-        return super().get_identity(address_name)
+    def get_identity(self, address):
+        self.call_log.append(("get_identity", address))
+        return super().get_identity(address)
 
-    def store_session(self, address_name, session_record):
-        self.call_log.append(("store_session", address_name, session_record))
-        super().store_session(address_name, session_record)
+    def store_session(self, address, session_record):
+        self.call_log.append(("store_session", address, session_record))
+        super().store_session(address, session_record)
 
-    def load_session(self, address_name):
-        self.call_log.append(("load_session", address_name))
-        return super().load_session(address_name)
+    def load_session(self, address):
+        self.call_log.append(("load_session", address))
+        return super().load_session(address)
 
     def save_pre_key(self, pre_key_id, pre_key_record):
         self.call_log.append(("save_pre_key", pre_key_id, pre_key_record))
@@ -81,8 +81,8 @@ def test_identity_key_proxy(identity_key_pair, spied_persistent_storage, protoco
     ik = identity_key.IdentityKey(identity_key.IdentityKeyPair.generate().public_key().serialize())
     store1.save_identity(protocol_address, ik)
 
-    string_address = f"{protocol_address.name()}:{protocol_address.device_id()}"
-    assert any(log[0] == "save_identity" and log[1] == string_address for log in spied_persistent_storage.call_log)
+    assert any(log[0] == "save_identity" and log[1].name() == protocol_address.name() and 
+               log[1].device_id() == protocol_address.device_id() for log in spied_persistent_storage.call_log)
 
     # Create a new store to simulate cache miss
     store2 = storage.InMemSignalProtocolStore(identity_key_pair, registration_id, spied_persistent_storage)
@@ -90,17 +90,18 @@ def test_identity_key_proxy(identity_key_pair, spied_persistent_storage, protoco
 
     # Test get_identity
     retrieved_ik = store2.get_identity(protocol_address)
-    assert any(log[0] == "get_identity" and log[1] == string_address for log in spied_persistent_storage.call_log)
+    assert any(log[0] == "get_identity" and log[1].name() == protocol_address.name() and 
+               log[1].device_id() == protocol_address.device_id() for log in spied_persistent_storage.call_log)
     assert retrieved_ik.serialize() == ik.serialize()
 
 def test_session_proxy(identity_key_pair, spied_persistent_storage, protocol_address, session_record):
     registration_id = 123
     store1 = storage.InMemSignalProtocolStore(identity_key_pair, registration_id, spied_persistent_storage)
-    string_address = f"{protocol_address.name()}:{protocol_address.device_id()}"
 
     # Test store_session
     store1.store_session(protocol_address, session_record)
-    assert any(log[0] == "store_session" and log[1] == string_address for log in spied_persistent_storage.call_log)
+    assert any(log[0] == "store_session" and log[1].name() == protocol_address.name() and 
+               log[1].device_id() == protocol_address.device_id() for log in spied_persistent_storage.call_log)
 
     # Create a new store to simulate cache miss
     store2 = storage.InMemSignalProtocolStore(identity_key_pair, registration_id, spied_persistent_storage)
@@ -108,7 +109,8 @@ def test_session_proxy(identity_key_pair, spied_persistent_storage, protocol_add
 
     # Test load_session
     retrieved_session = store2.load_session(protocol_address)
-    assert any(log[0] == "load_session" and log[1] == string_address for log in spied_persistent_storage.call_log)
+    assert any(log[0] == "load_session" and log[1].name() == protocol_address.name() and 
+               log[1].device_id() == protocol_address.device_id() for log in spied_persistent_storage.call_log)
     assert retrieved_session.serialize() == session_record.serialize()
 
 def test_pre_key_proxy(identity_key_pair, spied_persistent_storage, pre_key_record):
@@ -156,11 +158,13 @@ def test_signed_pre_key_proxy(identity_key_pair, spied_persistent_storage, signe
 def test_sender_key_proxy(identity_key_pair, spied_persistent_storage, sender_key_name, sender_key_record):
     registration_id = 123
     store1 = storage.InMemSignalProtocolStore(identity_key_pair, registration_id, spied_persistent_storage)
-    string_sender_key_name = f"{sender_key_name.group_id()}:{sender_key_name.sender().name()}:{sender_key_name.sender().device_id()}"
 
     # Test store_sender_key
     store1.store_sender_key(sender_key_name, sender_key_record)
-    assert any(log[0] == "store_sender_key" and log[1] == string_sender_key_name for log in spied_persistent_storage.call_log)
+    assert any(log[0] == "store_sender_key" and log[1].group_id() == sender_key_name.group_id() and
+               log[1].sender().name() == sender_key_name.sender().name() and
+               log[1].sender().device_id() == sender_key_name.sender().device_id() 
+               for log in spied_persistent_storage.call_log)
 
     # Create a new store to simulate cache miss
     store2 = storage.InMemSignalProtocolStore(identity_key_pair, registration_id, spied_persistent_storage)
@@ -168,5 +172,8 @@ def test_sender_key_proxy(identity_key_pair, spied_persistent_storage, sender_ke
 
     # Test load_sender_key
     retrieved_sender_key = store2.load_sender_key(sender_key_name)
-    assert any(log[0] == "load_sender_key" and log[1] == string_sender_key_name for log in spied_persistent_storage.call_log)
+    assert any(log[0] == "load_sender_key" and log[1].group_id() == sender_key_name.group_id() and
+               log[1].sender().name() == sender_key_name.sender().name() and
+               log[1].sender().device_id() == sender_key_name.sender().device_id() 
+               for log in spied_persistent_storage.call_log)
     assert retrieved_sender_key.serialize() == sender_key_record.serialize()
