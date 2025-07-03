@@ -27,4 +27,19 @@ for name, module in _submodules.items():
     sys.modules[f"signal_protocol.{name}"] = module
 
 # Export everything
-__all__ = list(_submodules.keys())
+__all__ = [
+    'address',
+    'curve',
+    'error',
+    'fingerprint',
+    'group_cipher',
+    'identity_key',
+    'protocol',
+    'ratchet',
+    'sealed_sender',
+    'sender_keys',
+    'session_cipher',
+    'session',
+    'state',
+    'storage',
+]
