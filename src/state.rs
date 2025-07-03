@@ -1,6 +1,7 @@
+#![allow(dead_code)]
+
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::wrap_pyfunction;
 
 use crate::curve::{KeyPair, PrivateKey, PublicKey};
 use crate::error::{Result, SignalProtocolError};
@@ -83,7 +84,7 @@ impl PreKeyBundle {
         })
     }
 
-    fn signed_pre_key_signature(&self, py: Python) -> Result<PyObject> {
+    fn signed_pre_key_signature(&self, py: Python<'_>) -> Result<PyObject> {
         let result = self.state.signed_pre_key_signature()?;
         Ok(PyBytes::new(py, result).into())
     }
@@ -140,7 +141,7 @@ impl PreKeyRecord {
         Ok(PrivateKey::new(self.state.private_key()?))
     }
 
-    fn serialize(&self, py: Python) -> Result<PyObject> {
+    fn serialize(&self, py: Python<'_>) -> Result<PyObject> {
         let result = self.state.serialize()?;
         Ok(PyBytes::new(py, &result).into())
     }
@@ -206,7 +207,7 @@ impl SignedPreKeyRecord {
         Ok(self.state.timestamp()?)
     }
 
-    fn signature(&self, py: Python) -> Result<PyObject> {
+    fn signature(&self, py: Python<'_>) -> Result<PyObject> {
         let sig = self.state.signature()?;
         Ok(PyBytes::new(py, &sig).into())
     }
@@ -229,7 +230,7 @@ impl SignedPreKeyRecord {
         })
     }
 
-    fn serialize(&self, py: Python) -> Result<PyObject> {
+    fn serialize(&self, py: Python<'_>) -> Result<PyObject> {
         let result = self.state.serialize()?;
         Ok(PyBytes::new(py, &result).into())
     }
@@ -320,14 +321,11 @@ impl SessionRecord {
     }
 }
 
-/// UnacknowledgedPreKeyMessageItems is not exposed as part of the upstream public API.
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PreKeyBundle>()?;
     module.add_class::<PreKeyRecord>()?;
-    module.add_class::<SessionRecord>()?;
     module.add_class::<SignedPreKeyRecord>()?;
-    module
-        .add_function(wrap_pyfunction!(generate_n_prekeys, module)?)
-        .unwrap();
+    module.add_class::<SessionRecord>()?;
+    module.add_function(wrap_pyfunction!(generate_n_prekeys, module)?)?;
     Ok(())
 }

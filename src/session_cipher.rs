@@ -1,6 +1,7 @@
+#![allow(dead_code)]
+
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::wrap_pyfunction;
 
 use futures::executor::block_on;
 use rand::rngs::OsRng;
@@ -28,7 +29,7 @@ pub fn message_encrypt(
 
 #[pyfunction]
 pub fn message_decrypt(
-    py: Python,
+    py: Python<'_>,
     protocol_store: &mut InMemSignalProtocolStore,
     remote_address: &ProtocolAddress,
     msg: &CiphertextMessage,
@@ -49,7 +50,7 @@ pub fn message_decrypt(
 
 #[pyfunction]
 pub fn message_decrypt_prekey(
-    py: Python,
+    py: Python<'_>,
     protocol_store: &mut InMemSignalProtocolStore,
     remote_address: &ProtocolAddress,
     msg: &PreKeySignalMessage,
@@ -70,7 +71,7 @@ pub fn message_decrypt_prekey(
 
 #[pyfunction]
 pub fn message_decrypt_signal(
-    py: Python,
+    py: Python<'_>,
     protocol_store: &mut InMemSignalProtocolStore,
     remote_address: &ProtocolAddress,
     msg: &SignalMessage,
@@ -87,10 +88,10 @@ pub fn message_decrypt_signal(
     Ok(PyBytes::new(py, &plaintext).into())
 }
 
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
-    module.add_wrapped(wrap_pyfunction!(message_encrypt))?;
-    module.add_wrapped(wrap_pyfunction!(message_decrypt))?;
-    module.add_wrapped(wrap_pyfunction!(message_decrypt_prekey))?;
-    module.add_wrapped(wrap_pyfunction!(message_decrypt_signal))?;
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(message_encrypt, module)?)?;
+    module.add_function(wrap_pyfunction!(message_decrypt, module)?)?;
+    module.add_function(wrap_pyfunction!(message_decrypt_prekey, module)?)?;
+    module.add_function(wrap_pyfunction!(message_decrypt_signal, module)?)?;
     Ok(())
 }

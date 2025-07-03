@@ -1,38 +1,20 @@
 import pytest
 import random
-
-from signal_protocol import address, error, group_cipher, identity_key, sender_keys, storage, protocol
-
+from signal_protocol import address, error, group_cipher, identity_key, sender_keys, protocol
 
 DEVICE_ID = 1
 
-
-def test_group_no_send_session():
+def test_group_no_send_session_persistent(alice_store):
     sender_address = address.ProtocolAddress("+14159999111", DEVICE_ID)
     group_sender = sender_keys.SenderKeyName("pizza party", sender_address)
-
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair, alice_registration_id
-    )
 
     with pytest.raises(error.SignalProtocolException, match="invalid send key id"):
         group_cipher.group_encrypt(alice_store, group_sender, "hello".encode("utf8"))
 
 
-def test_group_basic_encrypt_decrypt():
+def test_group_basic_encrypt_decrypt_persistent(alice_store, bob_store):
     sender_address = address.ProtocolAddress("+14159999111", DEVICE_ID)
     group_sender = sender_keys.SenderKeyName("pizza party", sender_address)
-
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair, alice_registration_id
-    )
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -52,18 +34,9 @@ def test_group_basic_encrypt_decrypt():
     assert bob_plaintext.decode("utf8") == "hello"
 
 
-def test_group_no_recv_session():
+def test_group_no_recv_session_persistent(alice_store, bob_store):
     sender_address = address.ProtocolAddress("+14159999111", DEVICE_ID)
     group_sender = sender_keys.SenderKeyName("pizza party", sender_address)
-
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair, alice_registration_id
-    )
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -78,18 +51,9 @@ def test_group_no_recv_session():
         bob_plaintext = group_cipher.group_decrypt(alice_ciphertext, bob_store, group_sender)
 
 
-def test_group_large_message():
+def test_group_large_message_persistent(alice_store, bob_store):
     sender_address = address.ProtocolAddress("+14159999111", DEVICE_ID)
     group_sender = sender_keys.SenderKeyName("pizza party", sender_address)
-
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair, alice_registration_id
-    )
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -110,18 +74,9 @@ def test_group_large_message():
     assert bob_plaintext == large_message
 
 
-def test_group_basic_ratchet():
+def test_group_basic_ratchet_persistent(alice_store, bob_store):
     sender_address = address.ProtocolAddress("+14159999111", DEVICE_ID)
     group_sender = sender_keys.SenderKeyName("pizza party", sender_address)
-
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair, alice_registration_id
-    )
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -157,18 +112,9 @@ def test_group_basic_ratchet():
     assert bob_plaintext3.decode("utf8") == "message 3"
 
 
-def test_group_late_join():
+def test_group_late_join_persistent(alice_store, bob_store):
     sender_address = address.ProtocolAddress("+14159999111", DEVICE_ID)
     group_sender = sender_keys.SenderKeyName("pizza party", sender_address)
-
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair, alice_registration_id
-    )
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -192,18 +138,9 @@ def test_group_late_join():
     assert bob_plaintext.decode("utf8") == "welcome Bob!"
 
 
-def test_group_out_of_order():
+def test_group_out_of_order_persistent(alice_store, bob_store):
     sender_address = address.ProtocolAddress("+14159999111", DEVICE_ID)
     group_sender = sender_keys.SenderKeyName("pizza party", sender_address)
-
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair, alice_registration_id
-    )
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -231,18 +168,9 @@ def test_group_out_of_order():
         assert plaintext.decode("utf8") == f"{i}"
 
 
-def test_group_too_far_in_the_future():
+def test_group_too_far_in_the_future_persistent(alice_store, bob_store):
     sender_address = address.ProtocolAddress("+14159999111", DEVICE_ID)
     group_sender = sender_keys.SenderKeyName("pizza party", sender_address)
-
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair, alice_registration_id
-    )
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -267,18 +195,9 @@ def test_group_too_far_in_the_future():
         assert group_cipher.group_decrypt(alice_ciphertext, bob_store, group_sender)
 
 
-def test_group_message_key_limit():
+def test_group_message_key_limit_persistent(alice_store, bob_store):
     sender_address = address.ProtocolAddress("+14159999111", DEVICE_ID)
     group_sender = sender_keys.SenderKeyName("pizza party", sender_address)
-
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair, alice_registration_id
-    )
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store

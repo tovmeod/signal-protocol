@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::address::ProtocolAddress;
 use crate::curve::{PrivateKey, PublicKey};
 use crate::error::{Result, SignalProtocolError};
@@ -6,7 +8,6 @@ use crate::storage::InMemSignalProtocolStore;
 use futures::executor::block_on;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::wrap_pyfunction;
 
 use rand::rngs::OsRng;
 
@@ -364,14 +365,14 @@ pub fn sealed_sender_decrypt_to_usmc(
     }
 }
 
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<SenderCertificate>()?;
     module.add_class::<ServerCertificate>()?;
     module.add_class::<UnidentifiedSenderMessageContent>()?;
     module.add_class::<UnidentifiedSenderMessage>()?;
     module.add_class::<SealedSenderDecryptionResult>()?;
-    module.add_wrapped(wrap_pyfunction!(sealed_sender_decrypt))?;
-    module.add_wrapped(wrap_pyfunction!(sealed_sender_decrypt_to_usmc))?;
-    module.add_wrapped(wrap_pyfunction!(sealed_sender_encrypt))?;
+    module.add_function(wrap_pyfunction!(sealed_sender_decrypt, module)?)?;
+    module.add_function(wrap_pyfunction!(sealed_sender_decrypt_to_usmc, module)?)?;
+    module.add_function(wrap_pyfunction!(sealed_sender_encrypt, module)?)?;
     Ok(())
 }

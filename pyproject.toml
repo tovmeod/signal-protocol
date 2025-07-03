@@ -1,2 +1,25 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools-rust"]
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "signal-protocol"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "signal_protocol._signal_protocol"
+# Enable src layout
+python-source = "src"
+# Include Python files (including .pyi stub files)
+include = [
+    { path = "src/signal_protocol/__init__.py", format = "wheel" },
+    { path = "src/signal_protocol/_signal_protocol.pyi", format = "wheel" },
+    { path = "src/signal_protocol/py.typed", format = "wheel" }
+]

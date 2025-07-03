@@ -1,5 +1,6 @@
+#![allow(dead_code)]
+
 use pyo3::prelude::*;
-use pyo3::wrap_pyfunction;
 
 use futures::executor::block_on;
 use rand::rngs::OsRng;
@@ -47,8 +48,8 @@ pub fn process_prekey_bundle(
     Ok(())
 }
 
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
-    module.add_wrapped(wrap_pyfunction!(process_prekey_bundle))?;
-    module.add_wrapped(wrap_pyfunction!(process_prekey))?;
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(process_prekey, module)?)?;
+    module.add_function(wrap_pyfunction!(process_prekey_bundle, module)?)?;
     Ok(())
 }

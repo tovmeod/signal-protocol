@@ -1,4 +1,3 @@
-use pyo3::class::basic::PyObjectProtocol;
 use pyo3::prelude::*;
 
 #[pyclass]
@@ -23,10 +22,7 @@ impl ProtocolAddress {
     pub fn device_id(&self) -> u32 {
         self.state.device_id()
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for ProtocolAddress {
     fn __str__(&self) -> PyResult<String> {
         Ok(String::from(format!(
             "{} {}",
@@ -44,7 +40,7 @@ impl PyObjectProtocol for ProtocolAddress {
     }
 }
 
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<ProtocolAddress>()?;
     Ok(())
 }

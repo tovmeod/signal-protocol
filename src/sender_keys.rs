@@ -110,13 +110,13 @@ impl SenderKeyRecord {
         )?)
     }
 
-    pub fn serialize(&self, py: Python) -> Result<PyObject> {
+    pub fn serialize(&self, py: Python<'_>) -> Result<PyObject> {
         let bytes = self.state.serialize()?;
         Ok(PyBytes::new(py, &bytes).into())
     }
 }
 
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<SenderKeyName>()?;
     module.add_class::<SenderKeyRecord>()?;
     Ok(())

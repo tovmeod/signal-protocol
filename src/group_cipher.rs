@@ -1,6 +1,5 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
-use pyo3::wrap_pyfunction;
 
 use futures::executor::block_on;
 use rand::rngs::OsRng;
@@ -12,7 +11,7 @@ use crate::storage::InMemSignalProtocolStore;
 
 #[pyfunction]
 pub fn group_encrypt(
-    py: Python,
+    py: Python<'_>,
     protocol_store: &mut InMemSignalProtocolStore,
     sender_key_id: &SenderKeyName,
     plaintext: &[u8],
@@ -30,7 +29,7 @@ pub fn group_encrypt(
 
 #[pyfunction]
 pub fn group_decrypt(
-    py: Python,
+    py: Python<'_>,
     skm_bytes: &[u8],
     protocol_store: &mut InMemSignalProtocolStore,
     sender_key_id: &SenderKeyName,
@@ -84,23 +83,23 @@ pub fn create_sender_key_distribution_message(
     // The CiphertextMessage is required as it is the base class for SenderKeyDistributionMessage
     // on the Python side, so we must create _both_ a CiphertextMessage and a SenderKeyDistributionMessage
     // on the Rust side for inheritance to work.
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-    Py::new(
-        py,
-        (
-            SenderKeyDistributionMessage {
-                data: upstream_data,
-            },
-            CiphertextMessage { data: ciphertext },
-        ),
-    )
+    Python::with_gil(|py| {
+        Py::new(
+            py,
+            (
+                SenderKeyDistributionMessage {
+                    data: upstream_data,
+                },
+                CiphertextMessage { data: ciphertext },
+            ),
+        )
+    })
 }
 
-pub fn init_submodule(module: &PyModule) -> PyResult<()> {
-    module.add_wrapped(wrap_pyfunction!(group_encrypt))?;
-    module.add_wrapped(wrap_pyfunction!(group_decrypt))?;
-    module.add_wrapped(wrap_pyfunction!(process_sender_key_distribution_message))?;
-    module.add_wrapped(wrap_pyfunction!(create_sender_key_distribution_message))?;
+pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(group_encrypt, module)?)?;
+    module.add_function(wrap_pyfunction!(group_decrypt, module)?)?;
+    module.add_function(wrap_pyfunction!(process_sender_key_distribution_message, module)?)?;
+    module.add_function(wrap_pyfunction!(create_sender_key_distribution_message, module)?)?;
     Ok(())
 }
