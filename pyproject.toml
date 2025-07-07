@@ -21,5 +21,19 @@ python-source = "src"
 include = [
     { path = "src/signal_protocol/__init__.py", format = "wheel" },
     { path = "src/signal_protocol/_signal_protocol.pyi", format = "wheel" },
-    { path = "src/signal_protocol/py.typed", format = "wheel" }
+    { path = "src/signal_protocol/py.typed", format = "wheel" },
+    { path = "src/signal_protocol/address.pyi", format = "wheel" },
+    { path = "src/signal_protocol/curve.pyi", format = "wheel" },
+    { path = "src/signal_protocol/error.pyi", format = "wheel" },
+    { path = "src/signal_protocol/fingerprint.pyi", format = "wheel" },
+    { path = "src/signal_protocol/group_cipher.pyi", format = "wheel" },
+    { path = "src/signal_protocol/identity_key.pyi", format = "wheel" },
+    { path = "src/signal_protocol/protocol.pyi", format = "wheel" },
+    { path = "src/signal_protocol/ratchet.pyi", format = "wheel" },
+    { path = "src/signal_protocol/sealed_sender.pyi", format = "wheel" },
+    { path = "src/signal_protocol/sender_keys.pyi", format = "wheel" },
+    { path = "src/signal_protocol/session.pyi", format = "wheel" },
+    { path = "src/signal_protocol/session_cipher.pyi", format = "wheel" },
+    { path = "src/signal_protocol/state.pyi", format = "wheel" },
+    { path = "src/signal_protocol/storage.pyi", format = "wheel" },
 ]
