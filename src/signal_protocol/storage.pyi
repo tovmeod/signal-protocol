@@ -5,6 +5,7 @@ from typing import Optional
 from ._signal_protocol.storage import (
     PersistentStorageBase as _PersistentStorageBaseImpl,
     InMemSignalProtocolStore as _InMemSignalProtocolStoreImpl,
+    init_logging as _init_logging,
 )
 
 # Import required types from other modules
@@ -102,4 +103,17 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
     def store_sender_key(self, sender_key_name: SenderKeyName, record: SenderKeyRecord) -> None: ...
     def load_sender_key(self, sender_key_name: SenderKeyName) -> Optional[SenderKeyRecord]: ...
 
-__all__ = ["PersistentStorageBase", "InMemSignalProtocolStore"]
+def init_logging() -> None:
+    """Initialize logging for the signal-protocol library.
+
+    This function sets up env_logger to handle log output.
+    Call this once at the start of your application to see debug and error messages.
+
+    Environment variables:
+    - RUST_LOG=debug : Show all debug messages
+    - RUST_LOG=signal_protocol=debug : Show only signal-protocol debug messages
+    - RUST_LOG=error : Show only error messages
+    """
+    ...
+
+__all__ = ["PersistentStorageBase", "InMemSignalProtocolStore", "init_logging"]

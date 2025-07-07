@@ -1,5 +1,6 @@
 use futures::executor::block_on;
 use pyo3::prelude::*;
+use log::{debug, error};
 
 use crate::address::ProtocolAddress;
 use crate::error::{Result, SignalProtocolError};
@@ -166,14 +167,18 @@ impl InMemSignalProtocolStore {
 
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.save_identity with address: {} and identity", address.name());
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "save_identity", (address.clone(), identity.clone())) {
                     Ok(_) => Ok(cached_result),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
+                    Err(err) => {
+                        error!("Error calling persistent_storage.save_identity: {}", err);
+                        Err(SignalProtocolError::from(
+                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                format!("Python error: {}", err)
+                            )
+                        ).into())
+                    }
                 }
             })
         } else {
@@ -191,6 +196,7 @@ impl InMemSignalProtocolStore {
 
         // Fall back to persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.get_identity with address: {}", address.name());
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "get_identity", (address.clone(),)) {
                     Ok(result) => {
@@ -204,18 +210,24 @@ impl InMemSignalProtocolStore {
                                 }
                                 Ok(identity)
                             },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
+                            Err(err) => {
+                                error!("Error extracting identity from persistent_storage.get_identity result: {}", err);
+                                Err(SignalProtocolError::from(
+                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                        format!("Python error: {}", err)
+                                    )
+                                ).into())
+                            }
                         }
                     },
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
+                    Err(err) => {
+                        error!("Error calling persistent_storage.get_identity: {}", err);
+                        Err(SignalProtocolError::from(
+                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                format!("Python error: {}", err)
+                            )
+                        ).into())
+                    }
                 }
             })
         } else {
@@ -234,6 +246,7 @@ impl InMemSignalProtocolStore {
 
         // Fall back to persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.load_session with address: {}", address.name());
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "load_session", (address.clone(),)) {
                     Ok(result) => {
@@ -247,18 +260,24 @@ impl InMemSignalProtocolStore {
                                 }
                                 Ok(session)
                             },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
+                            Err(err) => {
+                                error!("Error extracting session from persistent_storage.load_session result: {}", err);
+                                Err(SignalProtocolError::from(
+                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                        format!("Python error: {}", err)
+                                    )
+                                ).into())
+                            }
                         }
                     },
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
+                    Err(err) => {
+                        error!("Error calling persistent_storage.load_session: {}", err);
+                        Err(SignalProtocolError::from(
+                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                format!("Python error: {}", err)
+                            )
+                        ).into())
+                    }
                 }
             })
         } else {
@@ -275,14 +294,18 @@ impl InMemSignalProtocolStore {
 
         // Also store in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.store_session with address: {}", address.name());
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "store_session", (address.clone(), record.clone())) {
                     Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
+                    Err(err) => {
+                        error!("Error calling persistent_storage.store_session: {}", err);
+                        Err(SignalProtocolError::from(
+                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                format!("Python error: {}", err)
+                            )
+                        ).into())
+                    }
                 }
             })
         } else {
@@ -307,15 +330,22 @@ impl InMemSignalProtocolStore {
 
         // Fall back to persistent storage's contains_session (NOT load_session)
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.contains_session with address: {}", address.name());
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "contains_session", (address.clone(),)) {
                     Ok(result) => {
                         match result.extract::<bool>(py) {
                             Ok(exists) => Ok(exists),
-                            Err(_) => Ok(false) // Handle extraction errors gracefully
+                            Err(err) => {
+                                error!("Error extracting result from persistent_storage.contains_session: {}", err);
+                                Ok(false) // Handle extraction errors gracefully
+                            }
                         }
                     },
-                    Err(_) => Ok(false) // Handle Python call errors gracefully
+                    Err(err) => {
+                        error!("Error calling persistent_storage.contains_session: {}", err);
+                        Ok(false) // Handle Python call errors gracefully
+                    }
                 }
             })
         } else {
@@ -331,6 +361,7 @@ impl InMemSignalProtocolStore {
             Err(_) => {
                 // If not in cache, try persistent storage
                 if let Some(ref py_storage) = self.py_storage {
+                    debug!("Calling persistent_storage.get_pre_key with id: {}", id);
                     Python::with_gil(|py| {
                         match py_storage.call_method1(py, "get_pre_key", (id,)) {
                             Ok(result) => {
@@ -340,18 +371,24 @@ impl InMemSignalProtocolStore {
                                         block_on(store.pre_key_store.save_pre_key(id, &record.state, None))?;
                                         Ok(record)
                                     },
-                                    Err(err) => Err(SignalProtocolError::from(
-                                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                            format!("Python error: {}", err)
-                                        )
-                                    ).into())
+                                    Err(err) => {
+                                        error!("Error extracting record from persistent_storage.get_pre_key result: {}", err);
+                                        Err(SignalProtocolError::from(
+                                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                                format!("Python error: {}", err)
+                                            )
+                                        ).into())
+                                    }
                                 }
                             },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
+                            Err(err) => {
+                                error!("Error calling persistent_storage.get_pre_key: {}", err);
+                                Err(SignalProtocolError::from(
+                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                        format!("Python error: {}", err)
+                                    )
+                                ).into())
+                            }
                         }
                     })
                 } else {
@@ -375,14 +412,18 @@ impl InMemSignalProtocolStore {
 
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.save_pre_key with id: {}", id);
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "save_pre_key", (id, record.clone())) {
                     Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
+                    Err(err) => {
+                        error!("Error calling persistent_storage.save_pre_key: {}", err);
+                        Err(SignalProtocolError::from(
+                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                format!("Python error: {}", err)
+                            )
+                        ).into())
+                    }
                 }
             })
         } else {
@@ -396,14 +437,18 @@ impl InMemSignalProtocolStore {
 
         // Also remove from persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.remove_pre_key with id: {}", id);
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "remove_pre_key", (id,)) {
                     Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
+                    Err(err) => {
+                        error!("Error calling persistent_storage.remove_pre_key: {}", err);
+                        Err(SignalProtocolError::from(
+                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                format!("Python error: {}", err)
+                            )
+                        ).into())
+                    }
                 }
             })
         } else {
@@ -419,6 +464,7 @@ impl InMemSignalProtocolStore {
             Err(_) => {
                 // If not in cache, try persistent storage
                 if let Some(ref py_storage) = self.py_storage {
+                    debug!("Calling persistent_storage.get_signed_pre_key with id: {}", id);
                     Python::with_gil(|py| {
                         match py_storage.call_method1(py, "get_signed_pre_key", (id,)) {
                             Ok(result) => {
@@ -428,18 +474,24 @@ impl InMemSignalProtocolStore {
                                         block_on(store.save_signed_pre_key(id, &record.state, None))?;
                                         Ok(record)
                                     },
-                                    Err(err) => Err(SignalProtocolError::from(
-                                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                            format!("Python error: {}", err)
-                                        )
-                                    ).into())
+                                    Err(err) => {
+                                        error!("Error extracting record from persistent_storage.get_signed_pre_key result: {}", err);
+                                        Err(SignalProtocolError::from(
+                                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                                format!("Python error: {}", err)
+                                            )
+                                        ).into())
+                                    }
                                 }
                             },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
+                            Err(err) => {
+                                error!("Error calling persistent_storage.get_signed_pre_key: {}", err);
+                                Err(SignalProtocolError::from(
+                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                        format!("Python error: {}", err)
+                                    )
+                                ).into())
+                            }
                         }
                     })
                 } else {
@@ -466,14 +518,18 @@ impl InMemSignalProtocolStore {
 
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.save_signed_pre_key with id: {}", id);
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "save_signed_pre_key", (id, record.clone())) {
                     Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
+                    Err(err) => {
+                        error!("Error calling persistent_storage.save_signed_pre_key: {}", err);
+                        Err(SignalProtocolError::from(
+                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                format!("Python error: {}", err)
+                            )
+                        ).into())
+                    }
                 }
             })
         } else {
@@ -496,14 +552,18 @@ impl InMemSignalProtocolStore {
 
         // Also store in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.store_sender_key");
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "store_sender_key", (sender_key_name.clone(), record.clone())) {
                     Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
+                    Err(err) => {
+                        error!("Error calling persistent_storage.store_sender_key: {}", err);
+                        Err(SignalProtocolError::from(
+                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                format!("Python error: {}", err)
+                            )
+                        ).into())
+                    }
                 }
             })
         } else {
@@ -525,6 +585,7 @@ impl InMemSignalProtocolStore {
 
         // Fall back to persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
+            debug!("Calling persistent_storage.load_sender_key");
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "load_sender_key", (sender_key_name.clone(),)) {
                     Ok(result) => {
@@ -538,18 +599,24 @@ impl InMemSignalProtocolStore {
                                 }
                                 Ok(record)
                             },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
+                            Err(err) => {
+                                error!("Error extracting record from persistent_storage.load_sender_key result: {}", err);
+                                Err(SignalProtocolError::from(
+                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                        format!("Python error: {}", err)
+                                    )
+                                ).into())
+                            }
                         }
                     },
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
+                    Err(err) => {
+                        error!("Error calling persistent_storage.load_sender_key: {}", err);
+                        Err(SignalProtocolError::from(
+                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                format!("Python error: {}", err)
+                            )
+                        ).into())
+                    }
                 }
             })
         } else {
@@ -558,8 +625,26 @@ impl InMemSignalProtocolStore {
     }
 }
 
+/// Initialize logging for the signal-protocol library
+///
+/// This function sets up env_logger to handle log output.
+/// Call this once at the start of your application to see debug and error messages.
+///
+/// Environment variables:
+/// - RUST_LOG=debug : Show all debug messages
+/// - RUST_LOG=signal_protocol=debug : Show only signal-protocol debug messages
+/// - RUST_LOG=error : Show only error messages
+#[pyfunction]
+pub fn init_logging() -> PyResult<()> {
+    // Silently ignore if logger is already initialized
+    let _ = env_logger::try_init();
+    Ok(())
+}
+
+
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PersistentStorageBase>()?;
     module.add_class::<InMemSignalProtocolStore>()?;
+    module.add_function(wrap_pyfunction!(init_logging, module)?)?;
     Ok(())
 }
