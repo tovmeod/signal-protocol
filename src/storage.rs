@@ -136,6 +136,13 @@ impl InMemSignalProtocolStore {
         registration_id: u32,
         persistent_storage: Option<Py<PersistentStorageBase>>
     ) -> PyResult<InMemSignalProtocolStore> {
+        debug!("Creating new InMemSignalProtocolStore with registration_id: {}", registration_id);
+        if persistent_storage.is_some() {
+            debug!("InMemSignalProtocolStore created with persistent storage backend");
+        } else {
+            debug!("InMemSignalProtocolStore created without persistent storage backend");
+        }
+
         match libsignal_protocol_rust::InMemSignalProtocolStore::new(key_pair.key, registration_id) {
             Ok(store) => Ok(Self { 
                 store,
@@ -147,17 +154,21 @@ impl InMemSignalProtocolStore {
 
     // Identity Store Methods
     fn get_identity_key_pair(&self) -> Result<IdentityKeyPair> {
+        debug!("get_identity_key_pair called");
         let key = block_on(self.store.identity_store.get_identity_key_pair(None))?;
         Ok(IdentityKeyPair { key })
     }
 
     fn get_local_registration_id(&self) -> Result<u32> {
+        debug!("get_local_registration_id called");
         Ok(block_on(
             self.store.identity_store.get_local_registration_id(None),
         )?)
     }
 
     fn save_identity(&mut self, address: &ProtocolAddress, identity: &IdentityKey) -> Result<bool> {
+        debug!("save_identity called for address: {}", address.name());
+
         // Always save in cache
         let cached_result = block_on(self.store.identity_store.save_identity(
             &address.state,
@@ -170,7 +181,10 @@ impl InMemSignalProtocolStore {
             debug!("Calling persistent_storage.save_identity with address: {} and identity", address.name());
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "save_identity", (address.clone(), identity.clone())) {
-                    Ok(_) => Ok(cached_result),
+                    Ok(_) => {
+                        debug!("persistent_storage.save_identity completed successfully");
+                        Ok(cached_result)
+                    },
                     Err(err) => {
                         error!("Error calling persistent_storage.save_identity: {}", err);
                         Err(SignalProtocolError::from(
@@ -182,17 +196,23 @@ impl InMemSignalProtocolStore {
                 }
             })
         } else {
+            debug!("No persistent storage available for save_identity");
             Ok(cached_result)
         }
     }
 
     fn get_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>> {
+        debug!("get_identity called for address: {}", address.name());
+
         // Try cache first
         let cached = block_on(self.store.identity_store.get_identity(&address.state, None))?;
 
         if cached.is_some() {
+            debug!("get_identity: found identity in cache for address: {}", address.name());
             return Ok(cached.map(|key| IdentityKey { key }));
         }
+
+        debug!("get_identity: no identity in cache for address: {}", address.name());
 
         // Fall back to persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
@@ -203,10 +223,13 @@ impl InMemSignalProtocolStore {
                         match result.extract::<Option<IdentityKey>>(py) {
                             Ok(identity) => {
                                 if let Some(identity) = &identity {
+                                    debug!("persistent_storage.get_identity returned identity for address: {}", address.name());
                                     let mut store = self.store.clone();
                                     let address_state = address.state.clone();
                                     let identity_key = identity.key.clone();
                                     block_on(store.identity_store.save_identity(&address_state, &identity_key, None))?;
+                                } else {
+                                    debug!("persistent_storage.get_identity returned None for address: {}", address.name());
                                 }
                                 Ok(identity)
                             },
@@ -231,18 +254,24 @@ impl InMemSignalProtocolStore {
                 }
             })
         } else {
+            debug!("No persistent storage available for get_identity");
             Ok(None)
         }
     }
 
     // Session Store Methods
     pub fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>> {
+        debug!("load_session called for address: {}", address.name());
+
         // Try cache first
         let cached = block_on(self.store.load_session(&address.state, None))?;
 
         if cached.is_some() {
+            debug!("load_session: found session in cache for address: {}", address.name());
             return Ok(cached.map(|state| SessionRecord { state }));
         }
+
+        debug!("load_session: no session in cache for address: {}", address.name());
 
         // Fall back to persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
@@ -253,10 +282,13 @@ impl InMemSignalProtocolStore {
                         match result.extract::<Option<SessionRecord>>(py) {
                             Ok(session) => {
                                 if let Some(session) = &session {
+                                    debug!("persistent_storage.load_session returned session for address: {}", address.name());
                                     let mut store = self.store.clone();
                                     let address_state = address.state.clone();
                                     let session_state = session.state.clone();
                                     block_on(store.store_session(&address_state, &session_state, None))?;
+                                } else {
+                                    debug!("persistent_storage.load_session returned None for address: {}", address.name());
                                 }
                                 Ok(session)
                             },
@@ -281,11 +313,14 @@ impl InMemSignalProtocolStore {
                 }
             })
         } else {
+            debug!("No persistent storage available for load_session");
             Ok(None)
         }
     }
 
     fn store_session(&mut self, address: &ProtocolAddress, record: &SessionRecord) -> Result<()> {
+        debug!("store_session called for address: {}", address.name());
+
         // Always store in cache
         block_on(
             self.store
@@ -297,7 +332,10 @@ impl InMemSignalProtocolStore {
             debug!("Calling persistent_storage.store_session with address: {}", address.name());
             Python::with_gil(|py| {
                 match py_storage.call_method1(py, "store_session", (address.clone(), record.clone())) {
-                    Ok(_) => Ok(()),
+                    Ok(_) => {
+                        debug!("persistent_storage.store_session completed successfully");
+                        Ok(())
+                    },
                     Err(err) => {
                         error!("Error calling persistent_storage.store_session: {}", err);
                         Err(SignalProtocolError::from(
@@ -309,6 +347,7 @@ impl InMemSignalProtocolStore {
                 }
             })
         } else {
+            debug!("No persistent storage available for store_session");
             Ok(())
         }
     }
