@@ -636,10 +636,20 @@ impl InMemSignalProtocolStore {
 /// - RUST_LOG=error : Show only error messages
 #[pyfunction]
 pub fn init_logging() -> PyResult<()> {
+    // Configure env_logger with debug level if RUST_LOG is not set
+    let result = env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Debug) // Default to debug level
+        .try_init();
+
     // Silently ignore if logger is already initialized
-    let _ = env_logger::try_init();
+    let _ = result;
+
+    // Add a debug message to confirm logging is working
+    debug!("signal-protocol logging initialized successfully");
+
     Ok(())
 }
+
 
 
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
