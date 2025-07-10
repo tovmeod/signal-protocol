@@ -144,9 +144,9 @@ impl InMemSignalProtocolStore {
         }
 
         match libsignal_protocol_rust::InMemSignalProtocolStore::new(key_pair.key, registration_id) {
-            Ok(store) => Ok(Self { 
+            Ok(store) => Ok(Self {
                 store,
-                py_storage: persistent_storage 
+                py_storage: persistent_storage
             }),
             Err(err) => Err(SignalProtocolError::new_err(err)),
         }
@@ -167,8 +167,6 @@ impl InMemSignalProtocolStore {
     }
 
     fn save_identity(&mut self, address: &ProtocolAddress, identity: &IdentityKey) -> Result<bool> {
-        debug!("save_identity called for address: {}", address.name());
-
         // Always save in cache
         let cached_result = block_on(self.store.identity_store.save_identity(
             &address.state,
@@ -178,9 +176,9 @@ impl InMemSignalProtocolStore {
 
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.save_identity with address: {} and identity", address.name());
             Python::with_gil(|py| {
-                match py_storage.call_method1(py, "save_identity", (address.clone(), identity.clone())) {
+                let storage_obj = py_storage.bind(py);
+                match crate::pymethod_caller::call_save_identity(py, storage_obj, address, identity) {
                     Ok(_) => {
                         debug!("persistent_storage.save_identity completed successfully");
                         Ok(cached_result)
@@ -196,142 +194,56 @@ impl InMemSignalProtocolStore {
                 }
             })
         } else {
-            debug!("No persistent storage available for save_identity");
             Ok(cached_result)
         }
     }
 
     fn get_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>> {
-        debug!("get_identity called for address: {}", address.name());
+        // First check cache
+        let cached_result = block_on(self.store.identity_store.get_identity(
+            &address.state,
+            None,
+        ));
 
-        // Try cache first
-        let cached = block_on(self.store.identity_store.get_identity(&address.state, None))?;
-
-        if cached.is_some() {
-            debug!("get_identity: found identity in cache for address: {}", address.name());
-            return Ok(cached.map(|key| IdentityKey { key }));
-        }
-
-        debug!("get_identity: no identity in cache for address: {}", address.name());
-
-        // Fall back to persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.get_identity with address: {}", address.name());
-            Python::with_gil(|py| {
-                match py_storage.call_method1(py, "get_identity", (address.clone(),)) {
-                    Ok(result) => {
-                        match result.extract::<Option<IdentityKey>>(py) {
-                            Ok(identity) => {
-                                if let Some(identity) = &identity {
-                                    debug!("persistent_storage.get_identity returned identity for address: {}", address.name());
-                                    let mut store = self.store.clone();
-                                    let address_state = address.state.clone();
-                                    let identity_key = identity.key.clone();
-                                    block_on(store.identity_store.save_identity(&address_state, &identity_key, None))?;
-                                } else {
-                                    debug!("persistent_storage.get_identity returned None for address: {}", address.name());
-                                }
-                                Ok(identity)
-                            },
+        match cached_result {
+            Ok(Some(identity)) => {
+                // Found in cache
+                Ok(Some(IdentityKey { key: identity }))
+            },
+            Ok(None) => {
+                // Not in cache, check persistent storage if available
+                if let Some(ref py_storage) = self.py_storage {
+                    Python::with_gil(|py| {
+                        let storage_obj = py_storage.bind(py);
+                        match crate::pymethod_caller::call_get_identity(py, storage_obj, address) {
+                            Ok(identity) => Ok(identity),
                             Err(err) => {
-                                error!("Error extracting identity from persistent_storage.get_identity result: {}", err);
-                                Err(SignalProtocolError::from(
-                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                        format!("Python error: {}", err)
-                                    )
-                                ).into())
+                                error!("Error calling persistent_storage.get_identity: {}", err);
+                                Ok(None) // Return None on error instead of failing
                             }
                         }
-                    },
-                    Err(err) => {
-                        error!("Error calling persistent_storage.get_identity: {}", err);
-                        Err(SignalProtocolError::from(
-                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                format!("Python error: {}", err)
-                            )
-                        ).into())
-                    }
+                    })
+                } else {
+                    Ok(None)
                 }
-            })
-        } else {
-            debug!("No persistent storage available for get_identity");
-            Ok(None)
-        }
-    }
-
-    // Session Store Methods
-    pub fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>> {
-        debug!("load_session called for address: {}", address.name());
-
-        // Try cache first
-        let cached = block_on(self.store.load_session(&address.state, None))?;
-
-        if cached.is_some() {
-            debug!("load_session: found session in cache for address: {}", address.name());
-            return Ok(cached.map(|state| SessionRecord { state }));
-        }
-
-        debug!("load_session: no session in cache for address: {}", address.name());
-
-        // Fall back to persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.load_session with address: {}", address.name());
-            Python::with_gil(|py| {
-                match py_storage.call_method1(py, "load_session", (address.clone(),)) {
-                    Ok(result) => {
-                        match result.extract::<Option<SessionRecord>>(py) {
-                            Ok(session) => {
-                                if let Some(session) = &session {
-                                    debug!("persistent_storage.load_session returned session for address: {}", address.name());
-                                    let mut store = self.store.clone();
-                                    let address_state = address.state.clone();
-                                    let session_state = session.state.clone();
-                                    block_on(store.store_session(&address_state, &session_state, None))?;
-                                } else {
-                                    debug!("persistent_storage.load_session returned None for address: {}", address.name());
-                                }
-                                Ok(session)
-                            },
-                            Err(err) => {
-                                error!("Error extracting session from persistent_storage.load_session result: {}", err);
-                                Err(SignalProtocolError::from(
-                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                        format!("Python error: {}", err)
-                                    )
-                                ).into())
-                            }
-                        }
-                    },
-                    Err(err) => {
-                        error!("Error calling persistent_storage.load_session: {}", err);
-                        Err(SignalProtocolError::from(
-                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                format!("Python error: {}", err)
-                            )
-                        ).into())
-                    }
-                }
-            })
-        } else {
-            debug!("No persistent storage available for load_session");
-            Ok(None)
+            },
+            Err(err) => Err(SignalProtocolError::from(err).into())
         }
     }
 
     fn store_session(&mut self, address: &ProtocolAddress, record: &SessionRecord) -> Result<()> {
-        debug!("store_session called for address: {}", address.name());
-
         // Always store in cache
-        block_on(
-            self.store
-                .store_session(&address.state, &record.state, None),
-        )?;
+        block_on(self.store.session_store.store_session(
+            &address.state,
+            &record.state,
+            None,
+        ))?;
 
         // Also store in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.store_session with address: {}", address.name());
             Python::with_gil(|py| {
-                match py_storage.call_method1(py, "store_session", (address.clone(), record.clone())) {
+                let storage_obj = py_storage.bind(py);
+                match crate::pymethod_caller::call_store_session(py, storage_obj, address, record) {
                     Ok(_) => {
                         debug!("persistent_storage.store_session completed successfully");
                         Ok(())
@@ -347,7 +259,6 @@ impl InMemSignalProtocolStore {
                 }
             })
         } else {
-            debug!("No persistent storage available for store_session");
             Ok(())
         }
     }
@@ -355,106 +266,89 @@ impl InMemSignalProtocolStore {
     /// Check if a session exists for the given address
     /// This is a lightweight operation that doesn't load session data
     fn contains_session(&self, address: &ProtocolAddress) -> Result<bool> {
-        // Check if session exists in cache first (lightweight check)
-        match block_on(self.store.load_session(&address.state, None)) {
-            Ok(cached) => {
-                if cached.is_some() {
-                    return Ok(true);
-                }
+        // First check cache
+        let cached_result = block_on(self.store.session_store.load_session(
+            &address.state,
+            None,
+        ));
+
+        match cached_result {
+            Ok(Some(_)) => {
+                // Found in cache
+                Ok(true)
             },
-            Err(_) => {
-                // Cache errors should not propagate - just fall through to persistent storage
-            }
-        }
-
-        // Fall back to persistent storage's contains_session (NOT load_session)
-        if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.contains_session with address: {}", address.name());
-            Python::with_gil(|py| {
-                match py_storage.call_method1(py, "contains_session", (address.clone(),)) {
-                    Ok(result) => {
-                        match result.extract::<bool>(py) {
-                            Ok(exists) => Ok(exists),
-                            Err(err) => {
-                                error!("Error extracting result from persistent_storage.contains_session: {}", err);
-                                Ok(false) // Handle extraction errors gracefully
-                            }
-                        }
-                    },
-                    Err(err) => {
-                        error!("Error calling persistent_storage.contains_session: {}", err);
-                        Ok(false) // Handle Python call errors gracefully
-                    }
-                }
-            })
-        } else {
-            Ok(false)
-        }
-    }
-
-    // PreKey Store Methods
-    fn get_pre_key(&self, id: PreKeyId) -> Result<PreKeyRecord> {
-        // Try cache first
-        match block_on(self.store.pre_key_store.get_pre_key(id, None)) {
-            Ok(state) => Ok(PreKeyRecord { state }),
-            Err(_) => {
-                // If not in cache, try persistent storage
+            Ok(None) => {
+                // Not in cache, check persistent storage if available
                 if let Some(ref py_storage) = self.py_storage {
-                    debug!("Calling persistent_storage.get_pre_key with id: {}", id);
                     Python::with_gil(|py| {
-                        match py_storage.call_method1(py, "get_pre_key", (id,)) {
-                            Ok(result) => {
-                                match result.extract::<PreKeyRecord>(py) {
-                                    Ok(record) => {
-                                        let mut store = self.store.clone();
-                                        block_on(store.pre_key_store.save_pre_key(id, &record.state, None))?;
-                                        Ok(record)
-                                    },
-                                    Err(err) => {
-                                        error!("Error extracting record from persistent_storage.get_pre_key result: {}", err);
-                                        Err(SignalProtocolError::from(
-                                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                                format!("Python error: {}", err)
-                                            )
-                                        ).into())
-                                    }
-                                }
-                            },
+                        let storage_obj = py_storage.bind(py);
+                        // We need to add a call_contains_session function
+                        match crate::pymethod_caller::call_contains_session(py, storage_obj, address) {
+                            Ok(contains) => Ok(contains),
                             Err(err) => {
-                                error!("Error calling persistent_storage.get_pre_key: {}", err);
-                                Err(SignalProtocolError::from(
-                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                        format!("Python error: {}", err)
-                                    )
-                                ).into())
+                                error!("Error calling persistent_storage.contains_session: {}", err);
+                                Ok(false) // Return false on error instead of failing
                             }
                         }
                     })
                 } else {
-                    Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("PreKey with ID {} not found", id)
-                        )
-                    ).into())
+                    Ok(false)
                 }
-            }
+            },
+            Err(_) => Ok(false) // Return false on error
+        }
+    }
+
+    pub fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>> {
+        // First check cache
+        let cached_result = block_on(self.store.session_store.load_session(
+            &address.state,
+            None,
+        ));
+
+        match cached_result {
+            Ok(Some(session)) => {
+                // Found in cache
+                Ok(Some(SessionRecord { state: session }))
+            },
+            Ok(None) => {
+                // Not in cache, check persistent storage if available
+                if let Some(ref py_storage) = self.py_storage {
+                    Python::with_gil(|py| {
+                        let storage_obj = py_storage.bind(py);
+                        match crate::pymethod_caller::call_load_session(py, storage_obj, address) {
+                            Ok(session) => Ok(session),
+                            Err(err) => {
+                                error!("Error calling persistent_storage.load_session: {}", err);
+                                Ok(None) // Return None on error instead of failing
+                            }
+                        }
+                    })
+                } else {
+                    Ok(None)
+                }
+            },
+            Err(err) => Err(SignalProtocolError::from(err).into())
         }
     }
 
     fn save_pre_key(&mut self, id: PreKeyId, record: &PreKeyRecord) -> Result<()> {
         // Always save in cache
-        block_on(
-            self.store
-                .pre_key_store
-                .save_pre_key(id, &record.state, None),
-        )?;
+        block_on(self.store.pre_key_store.save_pre_key(
+            id,
+            &record.state,
+            None,
+        ))?;
 
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.save_pre_key with id: {}", id);
             Python::with_gil(|py| {
-                match py_storage.call_method1(py, "save_pre_key", (id, record.clone())) {
-                    Ok(_) => Ok(()),
+                let storage_obj = py_storage.bind(py);
+                match crate::pymethod_caller::call_save_pre_key(py, storage_obj, id, record) {
+                    Ok(_) => {
+                        debug!("persistent_storage.save_pre_key completed successfully");
+                        Ok(())
+                    },
                     Err(err) => {
                         error!("Error calling persistent_storage.save_pre_key: {}", err);
                         Err(SignalProtocolError::from(
@@ -470,16 +364,56 @@ impl InMemSignalProtocolStore {
         }
     }
 
+    fn get_pre_key(&self, id: PreKeyId) -> Result<PreKeyRecord> {
+        // First check cache
+        let cached_result = block_on(self.store.pre_key_store.get_pre_key(id, None));
+
+        match cached_result {
+            Ok(pre_key) => {
+                // Found in cache
+                Ok(PreKeyRecord { state: pre_key })
+            },
+            Err(_) => {
+                // Not in cache, check persistent storage if available
+                if let Some(ref py_storage) = self.py_storage {
+                    Python::with_gil(|py| {
+                        let storage_obj = py_storage.bind(py);
+                        match crate::pymethod_caller::call_get_pre_key(py, storage_obj, id) {
+                            Ok(pre_key) => Ok(pre_key),
+                            Err(err) => {
+                                error!("Error calling persistent_storage.get_pre_key: {}", err);
+                                Err(SignalProtocolError::from(
+                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                        format!("PreKey {} not found", id)
+                                    )
+                                ).into())
+                            }
+                        }
+                    })
+                } else {
+                    Err(SignalProtocolError::from(
+                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                            format!("PreKey {} not found", id)
+                        )
+                    ).into())
+                }
+            }
+        }
+    }
+
     fn remove_pre_key(&mut self, id: PreKeyId) -> Result<()> {
-        // Remove from cache
+        // Always remove from cache
         block_on(self.store.pre_key_store.remove_pre_key(id, None))?;
 
         // Also remove from persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.remove_pre_key with id: {}", id);
             Python::with_gil(|py| {
-                match py_storage.call_method1(py, "remove_pre_key", (id,)) {
-                    Ok(_) => Ok(()),
+                let storage_obj = py_storage.bind(py);
+                match crate::pymethod_caller::call_remove_pre_key(py, storage_obj, id) {
+                    Ok(_) => {
+                        debug!("persistent_storage.remove_pre_key completed successfully");
+                        Ok(())
+                    },
                     Err(err) => {
                         error!("Error calling persistent_storage.remove_pre_key: {}", err);
                         Err(SignalProtocolError::from(
@@ -495,72 +429,27 @@ impl InMemSignalProtocolStore {
         }
     }
 
-    // Signed PreKey Store Methods
-    fn get_signed_pre_key(&self, id: SignedPreKeyId) -> Result<SignedPreKeyRecord> {
-        // Try cache first
-        match block_on(self.store.get_signed_pre_key(id, None)) {
-            Ok(state) => Ok(SignedPreKeyRecord { state }),
-            Err(_) => {
-                // If not in cache, try persistent storage
-                if let Some(ref py_storage) = self.py_storage {
-                    debug!("Calling persistent_storage.get_signed_pre_key with id: {}", id);
-                    Python::with_gil(|py| {
-                        match py_storage.call_method1(py, "get_signed_pre_key", (id,)) {
-                            Ok(result) => {
-                                match result.extract::<SignedPreKeyRecord>(py) {
-                                    Ok(record) => {
-                                        let mut store = self.store.clone();
-                                        block_on(store.save_signed_pre_key(id, &record.state, None))?;
-                                        Ok(record)
-                                    },
-                                    Err(err) => {
-                                        error!("Error extracting record from persistent_storage.get_signed_pre_key result: {}", err);
-                                        Err(SignalProtocolError::from(
-                                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                                format!("Python error: {}", err)
-                                            )
-                                        ).into())
-                                    }
-                                }
-                            },
-                            Err(err) => {
-                                error!("Error calling persistent_storage.get_signed_pre_key: {}", err);
-                                Err(SignalProtocolError::from(
-                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                        format!("Python error: {}", err)
-                                    )
-                                ).into())
-                            }
-                        }
-                    })
-                } else {
-                    Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("SignedPreKey with ID {} not found", id)
-                        )
-                    ).into())
-                }
-            }
-        }
-    }
-
     fn save_signed_pre_key(
         &mut self,
         id: SignedPreKeyId,
         record: &SignedPreKeyRecord,
     ) -> Result<()> {
         // Always save in cache
-        block_on(
-            self.store
-                .save_signed_pre_key(id, &record.state.to_owned(), None),
-        )?;
+        block_on(self.store.signed_pre_key_store.save_signed_pre_key(
+            id,
+            &record.state,
+            None,
+        ))?;
 
         // Also save in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.save_signed_pre_key with id: {}", id);
             Python::with_gil(|py| {
-                match py_storage.call_method1(py, "save_signed_pre_key", (id, record.clone())) {
-                    Ok(_) => Ok(()),
+                let storage_obj = py_storage.bind(py);
+                match crate::pymethod_caller::call_save_signed_pre_key(py, storage_obj, id, record) {
+                    Ok(_) => {
+                        debug!("persistent_storage.save_signed_pre_key completed successfully");
+                        Ok(())
+                    },
                     Err(err) => {
                         error!("Error calling persistent_storage.save_signed_pre_key: {}", err);
                         Err(SignalProtocolError::from(
@@ -576,14 +465,50 @@ impl InMemSignalProtocolStore {
         }
     }
 
-    // Sender Key Store Methods
+    fn get_signed_pre_key(&self, id: SignedPreKeyId) -> Result<SignedPreKeyRecord> {
+        // First check cache
+        let cached_result = block_on(self.store.signed_pre_key_store.get_signed_pre_key(id, None));
+
+        match cached_result {
+            Ok(signed_pre_key) => {
+                // Found in cache
+                Ok(SignedPreKeyRecord { state: signed_pre_key })
+            },
+            Err(_) => {
+                // Not in cache, check persistent storage if available
+                if let Some(ref py_storage) = self.py_storage {
+                    Python::with_gil(|py| {
+                        let storage_obj = py_storage.bind(py);
+                        match crate::pymethod_caller::call_get_signed_pre_key(py, storage_obj, id) {
+                            Ok(signed_pre_key) => Ok(signed_pre_key),
+                            Err(err) => {
+                                error!("Error calling persistent_storage.get_signed_pre_key: {}", err);
+                                Err(SignalProtocolError::from(
+                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                                        format!("SignedPreKey {} not found", id)
+                                    )
+                                ).into())
+                            }
+                        }
+                    })
+                } else {
+                    Err(SignalProtocolError::from(
+                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                            format!("SignedPreKey {} not found", id)
+                        )
+                    ).into())
+                }
+            }
+        }
+    }
+
     fn store_sender_key(
         &mut self,
         sender_key_name: &SenderKeyName,
         record: &SenderKeyRecord,
     ) -> Result<()> {
         // Always store in cache
-        block_on(self.store.store_sender_key(
+        block_on(self.store.sender_key_store.store_sender_key(
             &sender_key_name.state,
             &record.state,
             None,
@@ -591,10 +516,13 @@ impl InMemSignalProtocolStore {
 
         // Also store in persistent storage if available
         if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.store_sender_key");
             Python::with_gil(|py| {
-                match py_storage.call_method1(py, "store_sender_key", (sender_key_name.clone(), record.clone())) {
-                    Ok(_) => Ok(()),
+                let storage_obj = py_storage.bind(py);
+                match crate::pymethod_caller::call_store_sender_key(py, storage_obj, sender_key_name, record) {
+                    Ok(_) => {
+                        debug!("persistent_storage.store_sender_key completed successfully");
+                        Ok(())
+                    },
                     Err(err) => {
                         error!("Error calling persistent_storage.store_sender_key: {}", err);
                         Err(SignalProtocolError::from(
@@ -610,59 +538,43 @@ impl InMemSignalProtocolStore {
         }
     }
 
-
     fn load_sender_key(
         &mut self,
         sender_key_name: &SenderKeyName,
     ) -> Result<Option<SenderKeyRecord>> {
-        // Try cache first
-        let cached = block_on(self.store.load_sender_key(&sender_key_name.state, None))?;
+        // First check cache
+        let cached_result = block_on(self.store.sender_key_store.load_sender_key(
+            &sender_key_name.state,
+            None,
+        ));
 
-        if cached.is_some() {
-            return Ok(cached.map(|state| SenderKeyRecord { state }));
-        }
-
-        // Fall back to persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            debug!("Calling persistent_storage.load_sender_key");
-            Python::with_gil(|py| {
-                match py_storage.call_method1(py, "load_sender_key", (sender_key_name.clone(),)) {
-                    Ok(result) => {
-                        match result.extract::<Option<SenderKeyRecord>>(py) {
-                            Ok(record) => {
-                                if let Some(record) = &record {
-                                    let mut store = self.store.clone();
-                                    let sender_key_name_state = sender_key_name.state.clone();
-                                    let record_state = record.state.clone();
-                                    block_on(store.store_sender_key(&sender_key_name_state, &record_state, None))?;
-                                }
-                                Ok(record)
-                            },
+        match cached_result {
+            Ok(Some(sender_key)) => {
+                // Found in cache
+                Ok(Some(SenderKeyRecord { state: sender_key }))
+            },
+            Ok(None) => {
+                // Not in cache, check persistent storage if available
+                if let Some(ref py_storage) = self.py_storage {
+                    Python::with_gil(|py| {
+                        let storage_obj = py_storage.bind(py);
+                        match crate::pymethod_caller::call_load_sender_key(py, storage_obj, sender_key_name) {
+                            Ok(sender_key) => Ok(sender_key),
                             Err(err) => {
-                                error!("Error extracting record from persistent_storage.load_sender_key result: {}", err);
-                                Err(SignalProtocolError::from(
-                                    libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                        format!("Python error: {}", err)
-                                    )
-                                ).into())
+                                error!("Error calling persistent_storage.load_sender_key: {}", err);
+                                Ok(None) // Return None on error instead of failing
                             }
                         }
-                    },
-                    Err(err) => {
-                        error!("Error calling persistent_storage.load_sender_key: {}", err);
-                        Err(SignalProtocolError::from(
-                            libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                format!("Python error: {}", err)
-                            )
-                        ).into())
-                    }
+                    })
+                } else {
+                    Ok(None)
                 }
-            })
-        } else {
-            Ok(None)
+            },
+            Err(err) => Err(SignalProtocolError::from(err).into())
         }
     }
 }
+
 
 /// Initialize logging for the signal-protocol library
 ///

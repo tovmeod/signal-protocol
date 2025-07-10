@@ -1,7 +1,15 @@
+import asyncio
 import pytest
 import time
 from signal_protocol import storage, state, address, identity_key, session
 from tests.utils.sessions import create_pre_key_bundle
+
+
+def run_possibly_async(method_result):
+    """Helper to run potentially async method results"""
+    if asyncio.iscoroutine(method_result):
+        return asyncio.run(method_result)
+    return method_result
 
 
 class TestContainsSessionBasicFunctionality:
@@ -234,7 +242,6 @@ class TestContainsSessionPerformance:
         results = [alice_store.contains_session(protocol_address) for _ in range(10)]
         assert all(result is True for result in results)
 
-
 class TestPersistentStorageContainsSession:
     """Test PersistentStorage contains_session optimization."""
 
@@ -244,13 +251,14 @@ class TestPersistentStorageContainsSession:
         address_str = f"{protocol_address.name()}:{protocol_address.device_id()}"
 
         # Test: When session doesn't exist
-        result = persistent_storage.contains_session(protocol_address)
+        result = run_possibly_async(persistent_storage.contains_session(protocol_address))
         assert result is False
 
         # Test: Add session and test again
         persistent_storage.sessions[address_str] = session_record
-        result = persistent_storage.contains_session(protocol_address)
+        result = run_possibly_async(persistent_storage.contains_session(protocol_address))
         assert result is True
+
 
         # Test: Verify it's using optimized path (not load_session)
         # This test verifies the implementation in conftest.py is working correctly

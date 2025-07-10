@@ -17,6 +17,7 @@ mod session;
 mod session_cipher;
 mod state;
 mod storage;
+mod pymethod_caller;
 
 /// Signal Protocol in Python
 ///

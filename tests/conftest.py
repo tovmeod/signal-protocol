@@ -1,8 +1,9 @@
+import asyncio
 import pytest
 from typing import Dict, Optional
 from signal_protocol import storage, state, address, identity_key, curve, sender_keys
 
-# Python-based persistent storage logic - now inherits from PersistentStorageBase
+# Sync version - Python-based persistent storage logic
 class PersistentStorage(storage.PersistentStorageBase):
     def __init__(self) -> None:
         self.identities: Dict[str, identity_key.IdentityKey] = {}
@@ -93,12 +94,202 @@ class PersistentStorage(storage.PersistentStorageBase):
         self.sender_keys.clear()
 
 
-@pytest.fixture
-def persistent_storage() -> PersistentStorage:
-    """Create a fresh PersistentStorage instance for each test"""
-    return PersistentStorage()
+# Async version - same logic but with async methods
+class AsyncPersistentStorage(storage.PersistentStorageBase):
+    def __init__(self) -> None:
+        self.identities: Dict[str, identity_key.IdentityKey] = {}
+        self.sessions: Dict[str, state.SessionRecord] = {}
+        self.pre_keys: Dict[int, state.PreKeyRecord] = {}
+        self.signed_pre_keys: Dict[int, state.SignedPreKeyRecord] = {}
+        self.sender_keys: Dict[str, sender_keys.SenderKeyRecord] = {}
+
+    # Identity Store Methods
+    async def save_identity(self, address: address.ProtocolAddress, identity_key: identity_key.IdentityKey) -> bool:
+        """Save identity for the given address"""
+        # Simulate some async work
+        await asyncio.sleep(0.001)
+        address_key = f"{address.name()}:{address.device_id()}"
+        self.identities[address_key] = identity_key
+        return True
+
+    async def get_identity(self, address: address.ProtocolAddress) -> Optional[identity_key.IdentityKey]:
+        """Get identity for the given address"""
+        await asyncio.sleep(0.001)
+        address_key = f"{address.name()}:{address.device_id()}"
+        return self.identities.get(address_key, None)
+
+    # Session Store Methods
+    async def store_session(self, address: address.ProtocolAddress, session_record: state.SessionRecord) -> None:
+        """Store session for the given address"""
+        await asyncio.sleep(0.001)
+        address_key = f"{address.name()}:{address.device_id()}"
+        self.sessions[address_key] = session_record
+
+    async def load_session(self, address: address.ProtocolAddress) -> Optional[state.SessionRecord]:
+        """Load session for the given address"""
+        await asyncio.sleep(0.001)
+        address_key = f"{address.name()}:{address.device_id()}"
+        return self.sessions.get(address_key, None)
+
+    async def contains_session(self, address: address.ProtocolAddress) -> bool:
+        """Check if session exists for the given address"""
+        await asyncio.sleep(0.001)
+        address_key = f"{address.name()}:{address.device_id()}"
+        return address_key in self.sessions
+
+    # PreKey Store Methods
+    async def get_pre_key(self, pre_key_id: int) -> state.PreKeyRecord:
+        """Get prekey by ID - raises KeyError if not found"""
+        await asyncio.sleep(0.001)
+        if pre_key_id not in self.pre_keys:
+            raise KeyError(f"PreKey with ID {pre_key_id} not found")
+        return self.pre_keys[pre_key_id]
+
+    async def save_pre_key(self, pre_key_id: int, pre_key_record: state.PreKeyRecord) -> None:
+        """Save prekey record with given ID"""
+        await asyncio.sleep(0.001)
+        self.pre_keys[pre_key_id] = pre_key_record
+
+    async def remove_pre_key(self, pre_key_id: int) -> None:
+        """Remove prekey with given ID"""
+        await asyncio.sleep(0.001)
+        if pre_key_id in self.pre_keys:
+            del self.pre_keys[pre_key_id]
+
+    # Signed PreKey Store Methods
+    async def get_signed_pre_key(self, signed_pre_key_id: int) -> state.SignedPreKeyRecord:
+        """Get signed prekey by ID - raises KeyError if not found"""
+        await asyncio.sleep(0.001)
+        if signed_pre_key_id not in self.signed_pre_keys:
+            raise KeyError(f"SignedPreKey with ID {signed_pre_key_id} not found")
+        return self.signed_pre_keys[signed_pre_key_id]
+
+    async def save_signed_pre_key(self, signed_pre_key_id: int, signed_pre_key_record: state.SignedPreKeyRecord) -> None:
+        """Save signed prekey record with given ID"""
+        await asyncio.sleep(0.001)
+        self.signed_pre_keys[signed_pre_key_id] = signed_pre_key_record
+
+    # Sender Key Store Methods
+    async def store_sender_key(self, sender_key_name: sender_keys.SenderKeyName, sender_key_record: sender_keys.SenderKeyRecord) -> None:
+        """Store sender key record with given name"""
+        await asyncio.sleep(0.001)
+        # Convert SenderKeyName to a string key for storage
+        group_id = sender_key_name.group_id()
+        sender = sender_key_name.sender()
+        key = f"{group_id}:{sender.name()}:{sender.device_id()}"
+        self.sender_keys[key] = sender_key_record
+
+    async def load_sender_key(self, sender_key_name: sender_keys.SenderKeyName) -> Optional[sender_keys.SenderKeyRecord]:
+        """Load sender key by name"""
+        await asyncio.sleep(0.001)
+        # Convert SenderKeyName to a string key for lookup
+        group_id = sender_key_name.group_id()
+        sender = sender_key_name.sender()
+        key = f"{group_id}:{sender.name()}:{sender.device_id()}"
+        return self.sender_keys.get(key, None)
+
+    # Utility methods for testing
+    def clear_all(self) -> None:
+        """Clear all stored data - useful for test cleanup"""
+        self.identities.clear()
+        self.sessions.clear()
+        self.pre_keys.clear()
+        self.signed_pre_keys.clear()
+        self.sender_keys.clear()
 
 
+# Helper function to run async methods in tests
+def run_async_method(method, *args):
+    """Helper to run async methods in sync tests"""
+    if asyncio.iscoroutine(method):
+        # If it's already a coroutine, run it
+        try:
+            loop = asyncio.get_running_loop()
+            # We're in an async context, but this should not happen in our tests
+            raise RuntimeError("Cannot run async method in running loop")
+        except RuntimeError:
+            # No running loop, create a new one
+            return asyncio.run(method)
+    else:
+        # It's a regular method call, execute it
+        result = method(*args)
+        if asyncio.iscoroutine(result):
+            try:
+                loop = asyncio.get_running_loop()
+                raise RuntimeError("Cannot run async method in running loop")
+            except RuntimeError:
+                return asyncio.run(result)
+        return result
+
+
+# Parametrized fixtures
+@pytest.fixture(params=["sync", "async"])
+def persistent_storage(request) -> storage.PersistentStorageBase:
+    """Create either sync or async PersistentStorage instance for each test"""
+    if request.param == "sync":
+        return PersistentStorage()
+    else:
+        return AsyncPersistentStorage()
+
+
+@pytest.fixture(params=["sync", "async"])
+def alice_store(request) -> storage.InMemSignalProtocolStore:
+    """Create Alice's storage for testing with either sync or async persistent storage"""
+    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    alice_registration_id = 1
+
+    if request.param == "sync":
+        alice_persistent_storage = PersistentStorage()
+    else:
+        alice_persistent_storage = AsyncPersistentStorage()
+
+    # Create a store with caching
+    alice_store = storage.InMemSignalProtocolStore(
+        alice_identity_key_pair,
+        alice_registration_id,
+        alice_persistent_storage
+    )
+    return alice_store
+
+
+@pytest.fixture(params=["sync", "async"])
+def bob_store(request) -> storage.InMemSignalProtocolStore:
+    """Create Bob's storage with caching for testing"""
+    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    bob_registration_id = 2
+
+    if request.param == "sync":
+        bob_persistent_storage = PersistentStorage()
+    else:
+        bob_persistent_storage = AsyncPersistentStorage()
+
+    # Create a store with caching
+    bob_store = storage.InMemSignalProtocolStore(
+        bob_identity_key_pair,
+        bob_registration_id,
+        bob_persistent_storage
+    )
+    return bob_store
+
+
+@pytest.fixture(params=["sync", "async"])
+def proxy_instance(request, identity_key_pair: identity_key.IdentityKeyPair) -> storage.InMemSignalProtocolStore:
+    """Create a storage instance for general testing"""
+    registration_id = 123
+
+    if request.param == "sync":
+        persistent_storage_instance = PersistentStorage()
+    else:
+        persistent_storage_instance = AsyncPersistentStorage()
+
+    return storage.InMemSignalProtocolStore(
+        identity_key_pair,
+        registration_id,
+        persistent_storage_instance
+    )
+
+
+# Non-parametrized fixtures (these don't depend on storage type)
 @pytest.fixture
 def identity_key_pair() -> identity_key.IdentityKeyPair:
     """Generate a random identity key pair for testing"""
@@ -151,47 +342,3 @@ def sender_key_name(protocol_address: address.ProtocolAddress) -> sender_keys.Se
 def sender_key_record() -> sender_keys.SenderKeyRecord:
     """Create a sender key record for testing"""
     return sender_keys.SenderKeyRecord.new_empty()
-
-
-@pytest.fixture
-def alice_store() -> storage.InMemSignalProtocolStore:
-    """Create Alice's storage for testing"""
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_persistent_storage = PersistentStorage()
-
-    # Create a store with caching
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair,
-        alice_registration_id,
-        alice_persistent_storage
-    )
-    return alice_store
-
-
-@pytest.fixture
-def bob_store() -> storage.InMemSignalProtocolStore:
-    """Create Bob's storage with caching for testing"""
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_persistent_storage = PersistentStorage()
-
-    # Create a store with caching
-    bob_store = storage.InMemSignalProtocolStore(
-        bob_identity_key_pair,
-        bob_registration_id,
-        bob_persistent_storage
-    )
-    return bob_store
-
-
-@pytest.fixture
-def proxy_instance(identity_key_pair: identity_key.IdentityKeyPair, persistent_storage: PersistentStorage) -> storage.InMemSignalProtocolStore:
-    """Create a storage instance for general testing"""
-    registration_id = 123
-
-    return storage.InMemSignalProtocolStore(
-        identity_key_pair,
-        registration_id,
-        persistent_storage
-    )

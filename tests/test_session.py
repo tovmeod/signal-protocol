@@ -486,7 +486,7 @@ def test_bad_message_bundle():
     assert original_message == plaintext
 
     # Trying to get the prekey will now fail, as the prekey has been used and removed from the store
-    with pytest.raises(error.SignalProtocolException, match="PreKey with ID .* not found"):
+    with pytest.raises(error.SignalProtocolException, match="PreKey .* not found"):
         assert bob_store.get_pre_key(pre_key_id)
 
 

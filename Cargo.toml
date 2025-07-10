@@ -8,11 +8,13 @@ license = "AGPL-3.0-only"
 [dependencies]
 rand = "0.7.3"
 libsignal-protocol-rust = { git = "https://github.com/freedomofpress/libsignal-client", rev="609a1de73380a2b9d314db625e6b2f0368e838ec" }
+# Downgrade pyo3 to match pyo3-asyncio
 pyo3 = { version = "0.25.1", features = ["extension-module"] }
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros"] }
 futures = "0.3.31"
-#pyo3-stub-gen = "0.10.0"
 log = "0.4"
 env_logger = "0.10"
+async-trait = "0.1.77"
 
 [lib]
 name = "signal_protocol"
