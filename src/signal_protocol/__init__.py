@@ -109,8 +109,57 @@ class PersistentStorageBase(_signal_protocol.storage.PersistentStorageProtocol):
         # Wait for result
         return future.result()
     
-    # No method implementations - subclasses implement the methods directly
-    # Rust code calls _call_method('method_name', *args) instead
+    # Interface methods - subclasses should implement these methods
+    # These can be either sync or async - the base class handles both automatically
+    # Rust code calls _call_method('method_name', *args) instead of calling these directly
+    
+    def save_identity(self, address, identity_key):
+        """Save identity for the given address. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement save_identity")
+    
+    def get_identity(self, address):
+        """Get identity for the given address. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement get_identity")
+    
+    def store_session(self, address, session_record):
+        """Store session for the given address. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement store_session")
+    
+    def load_session(self, address):
+        """Load session for the given address. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement load_session")
+    
+    def contains_session(self, address):
+        """Check if session exists for the given address. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement contains_session")
+    
+    def get_pre_key(self, pre_key_id):
+        """Get prekey by ID. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement get_pre_key")
+    
+    def save_pre_key(self, pre_key_id, pre_key_record):
+        """Save prekey record. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement save_pre_key")
+    
+    def remove_pre_key(self, pre_key_id):
+        """Remove prekey by ID. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement remove_pre_key")
+    
+    def get_signed_pre_key(self, signed_pre_key_id):
+        """Get signed prekey by ID. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement get_signed_pre_key")
+    
+    def save_signed_pre_key(self, signed_pre_key_id, signed_pre_key_record):
+        """Save signed prekey record. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement save_signed_pre_key")
+    
+    def store_sender_key(self, sender_key_name, sender_key_record):
+        """Store sender key record. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement store_sender_key")
+    
+    def load_sender_key(self, sender_key_name):
+        """Load sender key by name. Implement in subclass."""
+        raise NotImplementedError("Subclasses must implement load_sender_key")
     
     def close(self):
         """Clean up the async executor."""
