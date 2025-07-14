@@ -37,3 +37,11 @@ include = [
     { path = "src/signal_protocol/state.pyi", format = "wheel" },
     { path = "src/signal_protocol/storage.pyi", format = "wheel" },
 ]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=0.24.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

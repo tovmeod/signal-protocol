@@ -13,13 +13,13 @@ use libsignal_protocol_rust::{
     IdentityKeyStore, PreKeyStore, SenderKeyStore, SessionStore, SignedPreKeyStore,
 };
 
-/// Base class for persistent storage that users can inherit from in Python
+/// Protocol interface for persistent storage that users can inherit from in Python
 #[pyclass(subclass)]
-pub struct PersistentStorageBase {
+pub struct PersistentStorageProtocol {
 }
 
 #[pymethods]
-impl PersistentStorageBase {
+impl PersistentStorageProtocol {
     #[new]
     fn new() -> Self {
         Self {}
@@ -103,13 +103,19 @@ impl PersistentStorageBase {
             "load_sender_key must be implemented by subclass"
         ))
     }
+
+    // Cleanup method
+    fn close(&self) -> PyResult<()> {
+        debug!("Closing PersistentStorageProtocol - base implementation does nothing");
+        Ok(())
+    }
 }
 
 // Custom Clone implementation for InMemSignalProtocolStore
 #[pyclass]
 pub struct InMemSignalProtocolStore {
     pub store: libsignal_protocol_rust::InMemSignalProtocolStore,
-    py_storage: Option<Py<PersistentStorageBase>>,
+    py_storage: Option<Py<PersistentStorageProtocol>>,
 }
 
 impl Clone for InMemSignalProtocolStore {
@@ -134,7 +140,7 @@ impl InMemSignalProtocolStore {
     fn new(
         key_pair: &IdentityKeyPair,
         registration_id: u32,
-        persistent_storage: Option<Py<PersistentStorageBase>>
+        persistent_storage: Option<Py<PersistentStorageProtocol>>
     ) -> PyResult<InMemSignalProtocolStore> {
         debug!("Creating new InMemSignalProtocolStore with registration_id: {}", registration_id);
         if persistent_storage.is_some() {
@@ -604,7 +610,7 @@ pub fn init_logging() -> PyResult<()> {
 
 
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<PersistentStorageBase>()?;
+    module.add_class::<PersistentStorageProtocol>()?;
     module.add_class::<InMemSignalProtocolStore>()?;
     module.add_function(wrap_pyfunction!(init_logging, module)?)?;
     Ok(())

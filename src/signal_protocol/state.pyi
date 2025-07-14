@@ -1,6 +1,8 @@
 # Typing stub for signal_protocol.state module
 # Direct class definitions instead of type aliases
 
+from typing import Optional, List
+
 from ._signal_protocol.state import (
     SessionRecord as _SessionRecordImpl,
     PreKeyRecord as _PreKeyRecordImpl,
@@ -25,7 +27,7 @@ class SessionRecord(_SessionRecordImpl):
 class PreKeyRecord(_PreKeyRecordImpl):
     """Record containing pre-key information."""
 
-    def __init__(self, id: int, key_pair: KeyPair) -> None: ...
+    def __init__(self, id: int, keypair: KeyPair) -> None: ...
     def serialize(self) -> bytes: ...
     @staticmethod
     def deserialize(data: bytes) -> 'PreKeyRecord': ...
@@ -33,7 +35,7 @@ class PreKeyRecord(_PreKeyRecordImpl):
 class SignedPreKeyRecord(_SignedPreKeyRecordImpl):
     """Record containing signed pre-key information."""
 
-    def __init__(self, id: int, timestamp: int, key_pair: KeyPair, signature: bytes) -> None: ...
+    def __init__(self, id: int, timestamp: int, keypair: KeyPair, signature: bytes) -> None: ...
     def serialize(self) -> bytes: ...
     @staticmethod
     def deserialize(data: bytes) -> 'SignedPreKeyRecord': ...
@@ -95,11 +97,11 @@ def generate_n_prekeys(n: int, id: int) -> List[PreKeyRecord]:
     """
     ...
 
-# And update the __all__ list to include it
+# Export all public symbols
 __all__ = [
     "SessionRecord",
     "PreKeyRecord",
     "SignedPreKeyRecord",
     "PreKeyBundle",
-    "generate_n_prekeys"  # ← Add this
+    "generate_n_prekeys"
 ]

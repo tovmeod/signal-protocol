@@ -5,7 +5,8 @@ from signal_protocol import address, curve, error, identity_key, sealed_sender, 
 from tests.utils.sessions import create_pre_key_bundle
 
 
-def test_sealed_sender_happy_persistent(alice_store, bob_store):
+@pytest.mark.asyncio
+async def test_sealed_sender_happy_persistent(alice_store, bob_store):
     alice_device_id = 2
     bob_device_id = 3
 
@@ -101,7 +102,8 @@ def test_sealed_sender_happy_persistent(alice_store, bob_store):
     assert bob_plaintext.device_id() == alice_device_id
 
 
-def test_sealed_sender_expired_cert_persistent(alice_store, bob_store):
+@pytest.mark.asyncio
+async def test_sealed_sender_expired_cert_persistent(alice_store, bob_store):
     alice_device_id = 2
     bob_device_id = 3
 
@@ -194,7 +196,8 @@ def test_sealed_sender_expired_cert_persistent(alice_store, bob_store):
         )
 
 
-def test_sealed_sender_invalid_trust_root_persistent(alice_store, bob_store):
+@pytest.mark.asyncio
+async def test_sealed_sender_invalid_trust_root_persistent(alice_store, bob_store):
     alice_device_id = 2
     bob_device_id = 3
 
