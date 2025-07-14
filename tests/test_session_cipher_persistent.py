@@ -22,7 +22,8 @@ from signal_protocol import (
 DEVICE_ID = 1
 
 
-def test_basic_prekey_v3_persistent(alice_store, bob_store):
+@pytest.mark.asyncio
+async def test_basic_prekey_v3_persistent(alice_store, bob_store):
     alice_address = address.ProtocolAddress("+14151111111", DEVICE_ID)
     bob_address = address.ProtocolAddress("+14151111112", DEVICE_ID)
 
@@ -127,7 +128,8 @@ def test_basic_prekey_v3_persistent(alice_store, bob_store):
     assert alice_decrypts == bobs_response
 
 
-def test_basic_simultaneous_initiate_persistent(alice_store, bob_store):
+@pytest.mark.asyncio
+async def test_basic_simultaneous_initiate_persistent(alice_store, bob_store):
     alice_address = address.ProtocolAddress("+14151111111", 1)
     bob_address = address.ProtocolAddress("+14151111112", 1)
 

@@ -1,11 +1,12 @@
 import asyncio
 import pytest
 from typing import Dict, Optional
-from signal_protocol import storage, state, address, identity_key, curve, sender_keys
+from signal_protocol import storage, state, address, identity_key, curve, sender_keys, PersistentStorageBase
 
 # Sync version - Python-based persistent storage logic
-class PersistentStorage(storage.PersistentStorageBase):
+class PersistentStorage(PersistentStorageBase):
     def __init__(self) -> None:
+        super().__init__()
         self.identities: Dict[str, identity_key.IdentityKey] = {}
         self.sessions: Dict[str, state.SessionRecord] = {}
         self.pre_keys: Dict[int, state.PreKeyRecord] = {}
@@ -95,8 +96,9 @@ class PersistentStorage(storage.PersistentStorageBase):
 
 
 # Async version - same logic but with async methods
-class AsyncPersistentStorage(storage.PersistentStorageBase):
+class AsyncPersistentStorage(PersistentStorageBase):
     def __init__(self) -> None:
+        super().__init__()
         self.identities: Dict[str, identity_key.IdentityKey] = {}
         self.sessions: Dict[str, state.SessionRecord] = {}
         self.pre_keys: Dict[int, state.PreKeyRecord] = {}
@@ -197,39 +199,19 @@ class AsyncPersistentStorage(storage.PersistentStorageBase):
         self.signed_pre_keys.clear()
         self.sender_keys.clear()
 
-
-# Helper function to run async methods in tests
-def run_async_method(method, *args):
-    """Helper to run async methods in sync tests"""
-    if asyncio.iscoroutine(method):
-        # If it's already a coroutine, run it
-        try:
-            loop = asyncio.get_running_loop()
-            # We're in an async context, but this should not happen in our tests
-            raise RuntimeError("Cannot run async method in running loop")
-        except RuntimeError:
-            # No running loop, create a new one
-            return asyncio.run(method)
-    else:
-        # It's a regular method call, execute it
-        result = method(*args)
-        if asyncio.iscoroutine(result):
-            try:
-                loop = asyncio.get_running_loop()
-                raise RuntimeError("Cannot run async method in running loop")
-            except RuntimeError:
-                return asyncio.run(result)
-        return result
-
-
 # Parametrized fixtures
 @pytest.fixture(params=["sync", "async"])
-def persistent_storage(request) -> storage.PersistentStorageBase:
+def persistent_storage(request) -> PersistentStorageBase:
     """Create either sync or async PersistentStorage instance for each test"""
     if request.param == "sync":
-        return PersistentStorage()
+        storage = PersistentStorage()
     else:
-        return AsyncPersistentStorage()
+        storage = AsyncPersistentStorage()
+    
+    yield storage
+    
+    # Cleanup: close the storage to clean up any async executors
+    storage.close()
 
 
 @pytest.fixture(params=["sync", "async"])
@@ -249,7 +231,11 @@ def alice_store(request) -> storage.InMemSignalProtocolStore:
         alice_registration_id,
         alice_persistent_storage
     )
-    return alice_store
+    
+    yield alice_store
+    
+    # Cleanup: close the persistent storage to clean up any async executors
+    alice_persistent_storage.close()
 
 
 @pytest.fixture(params=["sync", "async"])
@@ -269,7 +255,11 @@ def bob_store(request) -> storage.InMemSignalProtocolStore:
         bob_registration_id,
         bob_persistent_storage
     )
-    return bob_store
+    
+    yield bob_store
+    
+    # Cleanup: close the persistent storage to clean up any async executors
+    bob_persistent_storage.close()
 
 
 @pytest.fixture(params=["sync", "async"])
@@ -282,11 +272,16 @@ def proxy_instance(request, identity_key_pair: identity_key.IdentityKeyPair) -> 
     else:
         persistent_storage_instance = AsyncPersistentStorage()
 
-    return storage.InMemSignalProtocolStore(
+    store = storage.InMemSignalProtocolStore(
         identity_key_pair,
         registration_id,
         persistent_storage_instance
     )
+    
+    yield store
+    
+    # Cleanup: close the persistent storage to clean up any async executors
+    persistent_storage_instance.close()
 
 
 # Non-parametrized fixtures (these don't depend on storage type)

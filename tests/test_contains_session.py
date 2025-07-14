@@ -15,7 +15,8 @@ def run_possibly_async(method_result):
 class TestContainsSessionBasicFunctionality:
     """Test basic contains_session functionality."""
 
-    def test_contains_session_with_existing_session(self, alice_store, protocol_address):
+    @pytest.mark.asyncio
+    async def test_contains_session_with_existing_session(self, alice_store, protocol_address):
         """Test contains_session returns True for existing sessions."""
         # Setup: Create and store a session
         session_record = state.SessionRecord.new_fresh()
@@ -35,7 +36,8 @@ class TestContainsSessionBasicFunctionality:
         # Verify: Should return False
         assert result is False
 
-    def test_contains_session_multiple_addresses(self, alice_store):
+    @pytest.mark.asyncio
+    async def test_contains_session_multiple_addresses(self, alice_store):
         """Test contains_session works correctly with multiple addresses."""
         # Setup: Create multiple addresses
         addr1 = address.ProtocolAddress("user1", 1)
@@ -55,14 +57,15 @@ class TestContainsSessionBasicFunctionality:
 class TestContainsSessionPersistentStorage:
     """Test contains_session with persistent storage integration."""
 
-    def test_contains_session_persistent_storage_only(self, persistent_storage, protocol_address):
+    @pytest.mark.asyncio
+    async def test_contains_session_persistent_storage_only(self, persistent_storage, protocol_address):
         """Test contains_session with session only in persistent storage."""
         # Setup: Create session
         session_record = state.SessionRecord.new_fresh()
 
-        # Setup: Store session directly in persistent storage (bypass cache)
-        address_str = f"{protocol_address.name()}:{protocol_address.device_id()}"
-        persistent_storage.sessions[address_str] = session_record
+        # Setup: Store session in persistent storage using the proper API
+        # This ensures the async executor handles it correctly
+        persistent_storage._call_method('store_session', protocol_address, session_record)
 
         # Setup: Create store with persistent storage
         identity_key_pair = identity_key.IdentityKeyPair.generate()
@@ -78,7 +81,8 @@ class TestContainsSessionPersistentStorage:
         # Verify: Should return True even though cache is empty
         assert result is True
 
-    def test_contains_session_cache_priority(self, persistent_storage, protocol_address):
+    @pytest.mark.asyncio
+    async def test_contains_session_cache_priority(self, persistent_storage, protocol_address):
         """Test contains_session checks cache before persistent storage."""
         # Setup: Create components
         identity_key_pair = identity_key.IdentityKeyPair.generate()
@@ -100,8 +104,9 @@ class TestContainsSessionPersistentStorage:
 
         # Additional verification: persistent storage should also have the session
         # because store_session updates both cache and persistent storage
-        address_str = f"{protocol_address.name()}:{protocol_address.device_id()}"
-        assert address_str in persistent_storage.sessions
+        # We need to check via the async executor, not directly in the dict
+        loaded_from_persistent = persistent_storage._call_method('load_session', protocol_address)
+        assert loaded_from_persistent is not None
 
     def test_contains_session_fallback_behavior(self, persistent_storage):
         """Test contains_session falls back correctly."""
@@ -115,8 +120,8 @@ class TestContainsSessionPersistentStorage:
         )
 
         # Setup: Ensure no session exists anywhere
-        address_str = f"{protocol_address.name()}:{protocol_address.device_id()}"
-        assert address_str not in persistent_storage.sessions
+        # Check via the async executor API, not directly in the dict
+        assert not persistent_storage._call_method('contains_session', protocol_address)
 
         # Test: Should return False when session doesn't exist anywhere
         result = store.contains_session(protocol_address)
@@ -160,7 +165,8 @@ class TestContainsSessionErrorHandling:
 class TestContainsSessionConsistency:
     """Test contains_session consistency with other methods."""
 
-    def test_contains_session_consistency_with_load_session(self, alice_store):
+    @pytest.mark.asyncio
+    async def test_contains_session_consistency_with_load_session(self, alice_store):
         """Test contains_session is consistent with load_session."""
         protocol_address = address.ProtocolAddress("test_user", 1)
 
@@ -179,7 +185,8 @@ class TestContainsSessionConsistency:
         assert contains_result == (load_result is not None)
         assert contains_result is True  # Both should be True now
 
-    def test_contains_session_after_session_operations(self, alice_store):
+    @pytest.mark.asyncio
+    async def test_contains_session_after_session_operations(self, alice_store):
         """Test contains_session behavior after various session operations."""
         protocol_address = address.ProtocolAddress("test_user", 1)
         session_record = state.SessionRecord.new_fresh()
@@ -200,7 +207,8 @@ class TestContainsSessionConsistency:
 class TestContainsSessionPerformance:
     """Test contains_session performance characteristics."""
 
-    def test_contains_session_performance_vs_load_session(self, alice_store):
+    @pytest.mark.asyncio
+    async def test_contains_session_performance_vs_load_session(self, alice_store):
         """Test that contains_session is faster than load_session."""
         protocol_address = address.ProtocolAddress("test_user", 1)
         session_record = state.SessionRecord.new_fresh()
@@ -226,7 +234,8 @@ class TestContainsSessionPerformance:
         # Allow some margin for measurement variance
         assert contains_time <= load_time * 1.1  # Allow 10% margin
 
-    def test_contains_session_multiple_calls_consistent(self, alice_store):
+    @pytest.mark.asyncio
+    async def test_contains_session_multiple_calls_consistent(self, alice_store):
         """Test contains_session returns consistent results on multiple calls."""
         protocol_address = address.ProtocolAddress("test_user", 1)
 
@@ -268,7 +277,8 @@ class TestPersistentStorageContainsSession:
 class TestContainsSessionIntegration:
     """Integration tests for contains_session with real Signal Protocol workflows."""
 
-    def test_contains_session_integration_with_protocol_flow(self, alice_store, bob_store):
+    @pytest.mark.asyncio
+    async def test_contains_session_integration_with_protocol_flow(self, alice_store, bob_store):
         """Test contains_session in realistic Signal Protocol scenarios."""
         # Setup: Create addresses for Alice and Bob
         alice_address = address.ProtocolAddress("alice", 1)
@@ -293,7 +303,8 @@ class TestContainsSessionIntegration:
         assert alice_store.contains_session(alice_address) is False
         assert bob_store.contains_session(bob_address) is False
 
-    def test_contains_session_with_multiple_devices(self, alice_store):
+    @pytest.mark.asyncio
+    async def test_contains_session_with_multiple_devices(self, alice_store):
         """Test contains_session with multi-device scenarios."""
         # Setup: Bob has multiple devices
         bob_device1 = address.ProtocolAddress("bob", 1) 
@@ -310,7 +321,8 @@ class TestContainsSessionIntegration:
         assert alice_store.contains_session(bob_device2) is False  # No session
         assert alice_store.contains_session(bob_device3) is True
 
-    def test_contains_session_in_session_workflow(self, alice_store, bob_store):
+    @pytest.mark.asyncio
+    async def test_contains_session_in_session_workflow(self, alice_store, bob_store):
         """Test contains_session integrates properly with session establishment workflow."""
         # Setup addresses
         alice_address = address.ProtocolAddress("alice", 1)

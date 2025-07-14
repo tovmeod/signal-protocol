@@ -55,6 +55,24 @@ class PersistentStorageBase(_PersistentStorageBaseImpl):
     def store_sender_key(self, sender_key_name: SenderKeyName, sender_key_record: SenderKeyRecord) -> None: ...
     def load_sender_key(self, sender_key_name: SenderKeyName) -> Optional[SenderKeyRecord]: ...
 
+    # Cleanup method
+    def close(self) -> None:
+        """
+        Close the persistent storage and clean up resources.
+        
+        This method shuts down the background async executor thread if it's running.
+        Call this method when you're done using the storage to ensure proper cleanup.
+        
+        Example:
+            storage = MyPersistentStorage()
+            try:
+                # Use storage...
+                pass
+            finally:
+                storage.close()
+        """
+        ...
+
 class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
     """In-memory implementation of Signal Protocol storage."""
 
