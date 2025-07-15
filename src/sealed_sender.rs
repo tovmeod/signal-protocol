@@ -155,10 +155,12 @@ impl SenderCertificate {
     }
 
     fn preferred_address(&self, store: &InMemSignalProtocolStore) -> Result<ProtocolAddress> {
+        // Convert our store to the SessionStore trait object to use our wrapper
+        let session_store = store as &dyn libsignal_protocol_rust::SessionStore;
         Ok(ProtocolAddress {
             state: block_on(
                 self.data
-                    .preferred_address(&store.store.session_store, None),
+                    .preferred_address(session_store, None),
             )?,
         })
     }
@@ -311,6 +313,12 @@ pub fn sealed_sender_decrypt(
     local_device_id: u32,
     protocol_store: &mut InMemSignalProtocolStore,
 ) -> PyResult<SealedSenderDecryptionResult> {
+    let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
+    let session_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SessionStore;
+    let identity_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::IdentityKeyStore;
+    let pre_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::PreKeyStore;
+    let signed_pre_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SignedPreKeyStore;
+    
     match block_on(libsignal_protocol_rust::sealed_sender_decrypt(
         ciphertext,
         &trust_root.key,
@@ -318,10 +326,10 @@ pub fn sealed_sender_decrypt(
         local_e164,
         local_uuid,
         local_device_id,
-        &mut protocol_store.store.identity_store,
-        &mut protocol_store.store.session_store,
-        &mut protocol_store.store.pre_key_store,
-        &mut protocol_store.store.signed_pre_key_store,
+        identity_store,
+        session_store,
+        pre_key_store,
+        signed_pre_key_store,
         None,
     )) {
         Ok(data) => Ok(SealedSenderDecryptionResult { data }),
@@ -338,12 +346,16 @@ pub fn sealed_sender_encrypt(
     py: Python,
 ) -> Result<PyObject> {
     let mut csprng = OsRng;
+    let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
+    let session_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SessionStore;
+    let identity_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::IdentityKeyStore;
+    
     let result = block_on(libsignal_protocol_rust::sealed_sender_encrypt(
         &destination.state,
         &sender_cert.data,
         ptext,
-        &mut protocol_store.store.session_store,
-        &mut protocol_store.store.identity_store,
+        session_store,
+        identity_store,
         None,
         &mut csprng,
     ))?;
@@ -355,9 +367,12 @@ pub fn sealed_sender_decrypt_to_usmc(
     ciphertext: &[u8],
     protocol_store: &mut InMemSignalProtocolStore,
 ) -> PyResult<UnidentifiedSenderMessageContent> {
+    let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
+    let identity_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::IdentityKeyStore;
+    
     match block_on(libsignal_protocol_rust::sealed_sender_decrypt_to_usmc(
         ciphertext,
-        &mut protocol_store.store.identity_store,
+        identity_store,
         None,
     )) {
         Ok(data) => Ok(UnidentifiedSenderMessageContent { data }),
