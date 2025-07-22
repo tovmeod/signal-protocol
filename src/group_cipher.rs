@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
-use futures::executor::block_on;
+use crate::runtime;
 use rand::rngs::OsRng;
 
 use crate::error::{Result, SignalProtocolError};
@@ -19,7 +19,7 @@ pub fn group_encrypt(
     let mut csprng = OsRng;
     let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
     let sender_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SenderKeyStore;
-    let ciphertext = block_on(libsignal_protocol_rust::group_encrypt(
+    let ciphertext = runtime::block_on(libsignal_protocol_rust::group_encrypt(
         sender_key_store,
         &sender_key_id.state,
         plaintext,
@@ -38,7 +38,7 @@ pub fn group_decrypt(
 ) -> Result<PyObject> {
     let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
     let sender_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SenderKeyStore;
-    let plaintext = block_on(libsignal_protocol_rust::group_decrypt(
+    let plaintext = runtime::block_on(libsignal_protocol_rust::group_decrypt(
         skm_bytes,
         sender_key_store,
         &sender_key_id.state,
@@ -55,7 +55,7 @@ pub fn process_sender_key_distribution_message(
 ) -> Result<()> {
     let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
     let sender_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SenderKeyStore;
-    Ok(block_on(
+    Ok(runtime::block_on(
         libsignal_protocol_rust::process_sender_key_distribution_message(
             &sender_key_name.state,
             &skdm.data,
@@ -73,7 +73,7 @@ pub fn create_sender_key_distribution_message(
     let mut csprng = OsRng;
     let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
     let sender_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SenderKeyStore;
-    let upstream_data = match block_on(
+    let upstream_data = match runtime::block_on(
         libsignal_protocol_rust::create_sender_key_distribution_message(
             &sender_key_name.state,
             sender_key_store,

@@ -1,287 +1,130 @@
-import asyncio
 import pytest
-from typing import Dict, Optional
-from signal_protocol import storage, state, address, identity_key, curve, sender_keys, PersistentStorageBase
+import tempfile
+import os
+from signal_protocol import storage, state, address, identity_key, curve, sender_keys
 
-# Sync version - Python-based persistent storage logic
-class PersistentStorage(PersistentStorageBase):
-    def __init__(self) -> None:
-        super().__init__()
-        self.identities: Dict[str, identity_key.IdentityKey] = {}
-        self.sessions: Dict[str, state.SessionRecord] = {}
-        self.pre_keys: Dict[int, state.PreKeyRecord] = {}
-        self.signed_pre_keys: Dict[int, state.SignedPreKeyRecord] = {}
-        self.sender_keys: Dict[str, sender_keys.SenderKeyRecord] = {}
+@pytest.fixture(autouse=True)
+def init_signal_logging():
+    """Initialize signal protocol logging for all tests"""
+    storage.init_logging()
 
-    # Identity Store Methods
-    def save_identity(self, address: address.ProtocolAddress, identity_key: identity_key.IdentityKey) -> bool:
-        """Save identity for the given address"""
-        address_key = f"{address.name()}:{address.device_id()}"
-        self.identities[address_key] = identity_key
-        return True
+@pytest.fixture
+def temp_db_path():
+    """Create a temporary database file that is automatically cleaned up"""
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=True) as temp_db:
+        yield temp_db.name
 
-    def get_identity(self, address: address.ProtocolAddress) -> Optional[identity_key.IdentityKey]:
-        """Get identity for the given address"""
-        address_key = f"{address.name()}:{address.device_id()}"
-        return self.identities.get(address_key, None)
-
-    # Session Store Methods
-    def store_session(self, address: address.ProtocolAddress, session_record: state.SessionRecord) -> None:
-        """Store session for the given address"""
-        address_key = f"{address.name()}:{address.device_id()}"
-        self.sessions[address_key] = session_record
-
-    def load_session(self, address: address.ProtocolAddress) -> Optional[state.SessionRecord]:
-        """Load session for the given address"""
-        address_key = f"{address.name()}:{address.device_id()}"
-        return self.sessions.get(address_key, None)
-
-    def contains_session(self, address: address.ProtocolAddress) -> bool:
-        """Check if session exists for the given address"""
-        address_key = f"{address.name()}:{address.device_id()}"
-        return address_key in self.sessions
-
-    # PreKey Store Methods
-    def get_pre_key(self, pre_key_id: int) -> state.PreKeyRecord:
-        """Get prekey by ID - raises KeyError if not found"""
-        if pre_key_id not in self.pre_keys:
-            raise KeyError(f"PreKey with ID {pre_key_id} not found")
-        return self.pre_keys[pre_key_id]
-
-    def save_pre_key(self, pre_key_id: int, pre_key_record: state.PreKeyRecord) -> None:
-        """Save prekey record with given ID"""
-        self.pre_keys[pre_key_id] = pre_key_record
-
-    def remove_pre_key(self, pre_key_id: int) -> None:
-        """Remove prekey with given ID"""
-        if pre_key_id in self.pre_keys:
-            del self.pre_keys[pre_key_id]
-
-    # Signed PreKey Store Methods
-    def get_signed_pre_key(self, signed_pre_key_id: int) -> state.SignedPreKeyRecord:
-        """Get signed prekey by ID - raises KeyError if not found"""
-        if signed_pre_key_id not in self.signed_pre_keys:
-            raise KeyError(f"SignedPreKey with ID {signed_pre_key_id} not found")
-        return self.signed_pre_keys[signed_pre_key_id]
-
-    def save_signed_pre_key(self, signed_pre_key_id: int, signed_pre_key_record: state.SignedPreKeyRecord) -> None:
-        """Save signed prekey record with given ID"""
-        self.signed_pre_keys[signed_pre_key_id] = signed_pre_key_record
-
-    # Sender Key Store Methods
-    def store_sender_key(self, sender_key_name: sender_keys.SenderKeyName, sender_key_record: sender_keys.SenderKeyRecord) -> None:
-        """Store sender key record with given name"""
-        # Convert SenderKeyName to a string key for storage
-        group_id = sender_key_name.group_id()
-        sender = sender_key_name.sender()
-        key = f"{group_id}:{sender.name()}:{sender.device_id()}"
-        self.sender_keys[key] = sender_key_record
-
-    def load_sender_key(self, sender_key_name: sender_keys.SenderKeyName) -> Optional[sender_keys.SenderKeyRecord]:
-        """Load sender key by name"""
-        # Convert SenderKeyName to a string key for lookup
-        group_id = sender_key_name.group_id()
-        sender = sender_key_name.sender()
-        key = f"{group_id}:{sender.name()}:{sender.device_id()}"
-        return self.sender_keys.get(key, None)
-
-    # Utility methods for testing
-    def clear_all(self) -> None:
-        """Clear all stored data - useful for test cleanup"""
-        self.identities.clear()
-        self.sessions.clear()
-        self.pre_keys.clear()
-        self.signed_pre_keys.clear()
-        self.sender_keys.clear()
-
-
-# Async version - same logic but with async methods
-class AsyncPersistentStorage(PersistentStorageBase):
-    def __init__(self) -> None:
-        super().__init__()
-        self.identities: Dict[str, identity_key.IdentityKey] = {}
-        self.sessions: Dict[str, state.SessionRecord] = {}
-        self.pre_keys: Dict[int, state.PreKeyRecord] = {}
-        self.signed_pre_keys: Dict[int, state.SignedPreKeyRecord] = {}
-        self.sender_keys: Dict[str, sender_keys.SenderKeyRecord] = {}
-
-    # Identity Store Methods
-    async def save_identity(self, address: address.ProtocolAddress, identity_key: identity_key.IdentityKey) -> bool:
-        """Save identity for the given address"""
-        # Simulate some async work
-        await asyncio.sleep(0.001)
-        address_key = f"{address.name()}:{address.device_id()}"
-        self.identities[address_key] = identity_key
-        return True
-
-    async def get_identity(self, address: address.ProtocolAddress) -> Optional[identity_key.IdentityKey]:
-        """Get identity for the given address"""
-        await asyncio.sleep(0.001)
-        address_key = f"{address.name()}:{address.device_id()}"
-        return self.identities.get(address_key, None)
-
-    # Session Store Methods
-    async def store_session(self, address: address.ProtocolAddress, session_record: state.SessionRecord) -> None:
-        """Store session for the given address"""
-        await asyncio.sleep(0.001)
-        address_key = f"{address.name()}:{address.device_id()}"
-        self.sessions[address_key] = session_record
-
-    async def load_session(self, address: address.ProtocolAddress) -> Optional[state.SessionRecord]:
-        """Load session for the given address"""
-        await asyncio.sleep(0.001)
-        address_key = f"{address.name()}:{address.device_id()}"
-        return self.sessions.get(address_key, None)
-
-    async def contains_session(self, address: address.ProtocolAddress) -> bool:
-        """Check if session exists for the given address"""
-        await asyncio.sleep(0.001)
-        address_key = f"{address.name()}:{address.device_id()}"
-        return address_key in self.sessions
-
-    # PreKey Store Methods
-    async def get_pre_key(self, pre_key_id: int) -> state.PreKeyRecord:
-        """Get prekey by ID - raises KeyError if not found"""
-        await asyncio.sleep(0.001)
-        if pre_key_id not in self.pre_keys:
-            raise KeyError(f"PreKey with ID {pre_key_id} not found")
-        return self.pre_keys[pre_key_id]
-
-    async def save_pre_key(self, pre_key_id: int, pre_key_record: state.PreKeyRecord) -> None:
-        """Save prekey record with given ID"""
-        await asyncio.sleep(0.001)
-        self.pre_keys[pre_key_id] = pre_key_record
-
-    async def remove_pre_key(self, pre_key_id: int) -> None:
-        """Remove prekey with given ID"""
-        await asyncio.sleep(0.001)
-        if pre_key_id in self.pre_keys:
-            del self.pre_keys[pre_key_id]
-
-    # Signed PreKey Store Methods
-    async def get_signed_pre_key(self, signed_pre_key_id: int) -> state.SignedPreKeyRecord:
-        """Get signed prekey by ID - raises KeyError if not found"""
-        await asyncio.sleep(0.001)
-        if signed_pre_key_id not in self.signed_pre_keys:
-            raise KeyError(f"SignedPreKey with ID {signed_pre_key_id} not found")
-        return self.signed_pre_keys[signed_pre_key_id]
-
-    async def save_signed_pre_key(self, signed_pre_key_id: int, signed_pre_key_record: state.SignedPreKeyRecord) -> None:
-        """Save signed prekey record with given ID"""
-        await asyncio.sleep(0.001)
-        self.signed_pre_keys[signed_pre_key_id] = signed_pre_key_record
-
-    # Sender Key Store Methods
-    async def store_sender_key(self, sender_key_name: sender_keys.SenderKeyName, sender_key_record: sender_keys.SenderKeyRecord) -> None:
-        """Store sender key record with given name"""
-        await asyncio.sleep(0.001)
-        # Convert SenderKeyName to a string key for storage
-        group_id = sender_key_name.group_id()
-        sender = sender_key_name.sender()
-        key = f"{group_id}:{sender.name()}:{sender.device_id()}"
-        self.sender_keys[key] = sender_key_record
-
-    async def load_sender_key(self, sender_key_name: sender_keys.SenderKeyName) -> Optional[sender_keys.SenderKeyRecord]:
-        """Load sender key by name"""
-        await asyncio.sleep(0.001)
-        # Convert SenderKeyName to a string key for lookup
-        group_id = sender_key_name.group_id()
-        sender = sender_key_name.sender()
-        key = f"{group_id}:{sender.name()}:{sender.device_id()}"
-        return self.sender_keys.get(key, None)
-
-    # Utility methods for testing
-    def clear_all(self) -> None:
-        """Clear all stored data - useful for test cleanup"""
-        self.identities.clear()
-        self.sessions.clear()
-        self.pre_keys.clear()
-        self.signed_pre_keys.clear()
-        self.sender_keys.clear()
-
-# Parametrized fixtures
-@pytest.fixture(params=["sync", "async"])
-def persistent_storage(request) -> PersistentStorageBase:
-    """Create either sync or async PersistentStorage instance for each test"""
-    if request.param == "sync":
-        storage = PersistentStorage()
-    else:
-        storage = AsyncPersistentStorage()
-    
-    yield storage
-    
-    # Cleanup: close the storage to clean up any async executors
-    storage.close()
-
-
-@pytest.fixture(params=["sync", "async"])
-def alice_store(request) -> storage.InMemSignalProtocolStore:
-    """Create Alice's storage for testing with either sync or async persistent storage"""
+# Basic store fixture (cache-only)
+@pytest.fixture
+def basic_store():
+    """Create a basic InMemSignalProtocolStore without persistence (cache-only)"""
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-
-    if request.param == "sync":
-        alice_persistent_storage = PersistentStorage()
-    else:
-        alice_persistent_storage = AsyncPersistentStorage()
-
-    # Create a store with caching
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair,
-        alice_registration_id,
-        alice_persistent_storage
-    )
     
-    yield alice_store
-    
-    # Cleanup: close the persistent storage to clean up any async executors
-    alice_persistent_storage.close()
-
-
-@pytest.fixture(params=["sync", "async"])
-def bob_store(request) -> storage.InMemSignalProtocolStore:
-    """Create Bob's storage with caching for testing"""
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-
-    if request.param == "sync":
-        bob_persistent_storage = PersistentStorage()
-    else:
-        bob_persistent_storage = AsyncPersistentStorage()
-
-    # Create a store with caching
-    bob_store = storage.InMemSignalProtocolStore(
-        bob_identity_key_pair,
-        bob_registration_id,
-        bob_persistent_storage
-    )
-    
-    yield bob_store
-    
-    # Cleanup: close the persistent storage to clean up any async executors
-    bob_persistent_storage.close()
-
-
-@pytest.fixture(params=["sync", "async"])
-def proxy_instance(request, identity_key_pair: identity_key.IdentityKeyPair) -> storage.InMemSignalProtocolStore:
-    """Create a storage instance for general testing"""
-    registration_id = 123
-
-    if request.param == "sync":
-        persistent_storage_instance = PersistentStorage()
-    else:
-        persistent_storage_instance = AsyncPersistentStorage()
-
     store = storage.InMemSignalProtocolStore(
-        identity_key_pair,
-        registration_id,
-        persistent_storage_instance
+        alice_identity_key_pair,
+        alice_registration_id
     )
     
     yield store
+    # No cleanup needed for basic store
+
+
+# Async fixture for store with database persistence  
+@pytest.fixture
+async def alice_store_with_persistence():
+    """Create Alice's store with database persistence (cache + backing store)"""
+    import tempfile
+    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    alice_registration_id = 1
+    device_jid = "alice@test.com"
     
-    # Cleanup: close the persistent storage to clean up any async executors
-    persistent_storage_instance.close()
+    # Use temporary SQLite database
+    with tempfile.NamedTemporaryFile(suffix='.db') as temp_db:
+        connection_string = f"sqlite://{temp_db.name}"
+        
+        alice_store = storage.InMemSignalProtocolStore(
+            alice_identity_key_pair,
+            alice_registration_id,
+            connection_string=connection_string,
+            device_jid=device_jid
+        )
+        
+        # Run migrations to create database tables
+        await alice_store.migrate()
+        
+        yield alice_store
+        # Database cleanup handled by temp file context manager
+
+@pytest.fixture
+def alice_store() -> storage.InMemSignalProtocolStore:
+    """Create Alice's basic store (cache-only) for testing"""
+    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    alice_registration_id = 1
+
+    # Create a basic store without persistence
+    alice_store = storage.InMemSignalProtocolStore(
+        alice_identity_key_pair,
+        alice_registration_id
+    )
+    
+    yield alice_store
+    # No cleanup needed for basic store
+
+
+@pytest.fixture
+async def bob_store_with_persistence():
+    """Create Bob's store with database persistence (cache + backing store)"""
+    import tempfile
+    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    bob_registration_id = 2
+    device_jid = "bob@test.com"
+    
+    # Use temporary SQLite database
+    with tempfile.NamedTemporaryFile(suffix='.db') as temp_db:
+        connection_string = f"sqlite://{temp_db.name}"
+        
+        bob_store = storage.InMemSignalProtocolStore(
+            bob_identity_key_pair,
+            bob_registration_id,
+            connection_string=connection_string,
+            device_jid=device_jid
+        )
+        
+        # Run migrations to create database tables
+        await bob_store.migrate()
+        
+        yield bob_store
+        # Database cleanup handled by temp file context manager
+
+@pytest.fixture
+def bob_store() -> storage.InMemSignalProtocolStore:
+    """Create Bob's basic store (cache-only) for testing"""
+    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    bob_registration_id = 2
+
+    # Create a basic store without persistence
+    bob_store = storage.InMemSignalProtocolStore(
+        bob_identity_key_pair,
+        bob_registration_id
+    )
+    
+    yield bob_store
+    # No cleanup needed for basic store
+
+
+@pytest.fixture
+def proxy_instance(identity_key_pair: identity_key.IdentityKeyPair) -> storage.InMemSignalProtocolStore:
+    """Create a basic storage instance for general testing (cache-only)"""
+    registration_id = 123
+
+    store = storage.InMemSignalProtocolStore(
+        identity_key_pair,
+        registration_id
+    )
+    
+    yield store
+    # No cleanup needed for basic store
 
 
 # Non-parametrized fixtures (these don't depend on storage type)

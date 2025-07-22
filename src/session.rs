@@ -2,7 +2,7 @@
 
 use pyo3::prelude::*;
 
-use futures::executor::block_on;
+use crate::runtime;
 use rand::rngs::OsRng;
 
 use crate::address::ProtocolAddress;
@@ -23,7 +23,7 @@ pub fn process_prekey(
     let pre_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::PreKeyStore;
     let signed_pre_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SignedPreKeyStore;
 
-    let result = block_on(libsignal_protocol_rust::process_prekey(
+    let result = runtime::block_on(libsignal_protocol_rust::process_prekey(
         &message.data,
         &remote_address.state,
         &mut session_record.state,
@@ -46,7 +46,7 @@ pub fn process_prekey_bundle(
     let session_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SessionStore;
     let identity_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::IdentityKeyStore;
 
-    block_on(libsignal_protocol_rust::process_prekey_bundle(
+    runtime::block_on(libsignal_protocol_rust::process_prekey_bundle(
         &remote_address.state,
         session_store,
         identity_store,

@@ -6,6 +6,7 @@ use pyo3::BoundObject;
 mod address;
 mod curve;
 mod error;
+mod runtime;
 mod fingerprint;
 mod group_cipher;
 mod identity_key;
@@ -17,7 +18,7 @@ mod session;
 mod session_cipher;
 mod state;
 mod storage;
-mod pymethod_caller;
+mod persistence;
 
 /// Signal Protocol in Python
 ///
@@ -87,6 +88,8 @@ fn _signal_protocol(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()
     let storage_module = PyModule::new(py, "storage")?;
     storage::init_submodule(&storage_module.clone().into_bound())?;
     module.add("storage", storage_module)?;
+
+    // TODO: Add persistence module when Python integration is ready
 
     Ok(())
 }

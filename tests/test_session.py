@@ -18,6 +18,7 @@ from signal_protocol import (
     session_cipher,
     state,
     storage,
+    InMemSignalProtocolStore,
 )
 
 DEVICE_ID = 1
@@ -33,10 +34,10 @@ def test_basic_prekey_v3():
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
 
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -133,7 +134,7 @@ def test_basic_prekey_v3():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1  # TODO: generate these
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
 
@@ -219,10 +220,10 @@ def test_bad_signed_pre_key_signature():
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
 
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -293,10 +294,10 @@ def test_repeat_bundle_message_v3():
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
 
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -400,10 +401,10 @@ def test_bad_message_bundle():
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
 
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -486,7 +487,7 @@ def test_bad_message_bundle():
     assert original_message == plaintext
 
     # Trying to get the prekey will now fail, as the prekey has been used and removed from the store
-    with pytest.raises(error.SignalProtocolException, match="PreKey .* not found"):
+    with pytest.raises(error.SignalProtocolException, match="invalid prekey identifier"):
         assert bob_store.get_pre_key(pre_key_id)
 
 
@@ -500,10 +501,10 @@ def test_optional_one_time_prekey():
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
 
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -578,10 +579,10 @@ def test_message_key_limits():  # Note: slow test
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -619,10 +620,10 @@ def test_basic_simultaneous_initiate():
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -708,10 +709,10 @@ def test_simultaneous_initiate_with_lossage():
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -788,10 +789,10 @@ def test_simultaneous_initiate_lost_message():
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -869,10 +870,10 @@ def test_simultaneous_initiate_repeated_messages():
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -998,10 +999,10 @@ def test_simultaneous_initiate_lost_message_repeated_messages():
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 
@@ -1163,10 +1164,10 @@ def test_basic_large_message():
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
 
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 

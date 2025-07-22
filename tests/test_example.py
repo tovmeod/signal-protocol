@@ -1,4 +1,5 @@
 from signal_protocol import curve, identity_key, storage, state
+from signal_protocol.storage import InMemSignalProtocolStore
 
 
 def test_example_doc():
@@ -19,7 +20,7 @@ def test_example_doc():
     # identity keys for other chat participants), PreKeyStore (for one's own prekey state),
     # SignedPreKeyStore (for one's own signed prekeys), and SessionStore (for established sessions
     # with chat participants).
-    store = storage.InMemSignalProtocolStore(identity_key_pair, registration_id)
+    store = InMemSignalProtocolStore(identity_key_pair, registration_id)
 
     # Clients should also generate a signed prekey.
     signed_pre_key_pair = curve.KeyPair.generate()

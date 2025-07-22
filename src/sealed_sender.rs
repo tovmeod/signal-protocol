@@ -5,7 +5,7 @@ use crate::curve::{PrivateKey, PublicKey};
 use crate::error::{Result, SignalProtocolError};
 use crate::storage::InMemSignalProtocolStore;
 
-use futures::executor::block_on;
+use crate::runtime;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -158,7 +158,7 @@ impl SenderCertificate {
         // Convert our store to the SessionStore trait object to use our wrapper
         let session_store = store as &dyn libsignal_protocol_rust::SessionStore;
         Ok(ProtocolAddress {
-            state: block_on(
+            state: runtime::block_on(
                 self.data
                     .preferred_address(session_store, None),
             )?,
@@ -319,7 +319,7 @@ pub fn sealed_sender_decrypt(
     let pre_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::PreKeyStore;
     let signed_pre_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SignedPreKeyStore;
     
-    match block_on(libsignal_protocol_rust::sealed_sender_decrypt(
+    match runtime::block_on(libsignal_protocol_rust::sealed_sender_decrypt(
         ciphertext,
         &trust_root.key,
         timestamp,
@@ -350,7 +350,7 @@ pub fn sealed_sender_encrypt(
     let session_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SessionStore;
     let identity_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::IdentityKeyStore;
     
-    let result = block_on(libsignal_protocol_rust::sealed_sender_encrypt(
+    let result = runtime::block_on(libsignal_protocol_rust::sealed_sender_encrypt(
         &destination.state,
         &sender_cert.data,
         ptext,
@@ -370,7 +370,7 @@ pub fn sealed_sender_decrypt_to_usmc(
     let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
     let identity_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::IdentityKeyStore;
     
-    match block_on(libsignal_protocol_rust::sealed_sender_decrypt_to_usmc(
+    match runtime::block_on(libsignal_protocol_rust::sealed_sender_decrypt_to_usmc(
         ciphertext,
         identity_store,
         None,

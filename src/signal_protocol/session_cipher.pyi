@@ -24,7 +24,7 @@ def message_encrypt(
 def message_decrypt(
     protocol_store: InMemSignalProtocolStore,
     remote_address: ProtocolAddress,
-    msg: Union[PreKeySignalMessage, SignalMessage, CiphertextMessage],
+    msg: CiphertextMessage,
 ) -> bytes:
     """Decrypt a message using Signal Protocol."""
     ...
