@@ -84,6 +84,18 @@ impl InMemSignalProtocolStore {
         ).map_err(crate::error::SignalProtocolError::new_err)?)
     }
 
+    /// Close the store and clean up resources
+    /// 
+    /// This method closes database connections and cleans up resources.
+    /// After calling this method, the store should not be used for database operations.
+    fn close(&mut self) -> PyResult<()> {
+        if let Some(ref mut persistence) = self.persistence_manager {
+            // Close the database connection pool
+            crate::runtime::block_on(persistence.close());
+        }
+        Ok(())
+    }
+
     // Signal Protocol Store Methods - properly expose the trait implementations to Python
     // These methods use the cache + backing store implementation via the traits
 

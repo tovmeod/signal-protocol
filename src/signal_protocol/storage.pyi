@@ -3,7 +3,6 @@ from typing import Optional
 
 # Import directly from native extension submodules
 from ._signal_protocol.storage import (
-    PersistentStorageBase as _PersistentStorageBaseImpl,
     InMemSignalProtocolStore as _InMemSignalProtocolStoreImpl,
     init_logging as _init_logging,
 )
@@ -13,65 +12,6 @@ from .address import ProtocolAddress
 from .identity_key import IdentityKey, IdentityKeyPair
 from .state import SessionRecord, PreKeyRecord, SignedPreKeyRecord
 from .sender_keys import SenderKeyName, SenderKeyRecord
-
-class PersistentStorageBase(_PersistentStorageBaseImpl):
-    """Base class for persistent storage implementations."""
-
-    def __init__(self) -> None: ...
-
-    # Identity store methods
-    def save_identity(self, address: ProtocolAddress, identity_key: IdentityKey) -> bool: ...
-    def get_identity(self, address: ProtocolAddress) -> Optional[IdentityKey]: ...
-
-    # Session store methods
-    def store_session(self, address: ProtocolAddress, session_record: SessionRecord) -> None: ...
-    def load_session(self, address: ProtocolAddress) -> Optional[SessionRecord]: ...
-    def contains_session(self, address: ProtocolAddress) -> bool:
-        """
-        Check if session exists for the given address.
-
-        This is a lightweight operation that can be optimized by subclasses
-        to avoid loading the full session data. The default implementation
-        uses load_session internally.
-
-        Args:
-            address: The protocol address to check
-
-        Returns:
-            True if session exists, False otherwise
-        """
-        ...
-
-    # PreKey store methods
-    def get_pre_key(self, pre_key_id: int) -> PreKeyRecord: ...
-    def save_pre_key(self, pre_key_id: int, pre_key_record: PreKeyRecord) -> None: ...
-    def remove_pre_key(self, pre_key_id: int) -> None: ...
-
-    # Signed PreKey store methods
-    def get_signed_pre_key(self, signed_pre_key_id: int) -> SignedPreKeyRecord: ...
-    def save_signed_pre_key(self, signed_pre_key_id: int, signed_pre_key_record: SignedPreKeyRecord) -> None: ...
-
-    # Sender key store methods
-    def store_sender_key(self, sender_key_name: SenderKeyName, sender_key_record: SenderKeyRecord) -> None: ...
-    def load_sender_key(self, sender_key_name: SenderKeyName) -> Optional[SenderKeyRecord]: ...
-
-    # Cleanup method
-    def close(self) -> None:
-        """
-        Close the persistent storage and clean up resources.
-        
-        This method shuts down the background async executor thread if it's running.
-        Call this method when you're done using the storage to ensure proper cleanup.
-        
-        Example:
-            storage = MyPersistentStorage()
-            try:
-                # Use storage...
-                pass
-            finally:
-                storage.close()
-        """
-        ...
 
 class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
     """In-memory Signal Protocol store with optional database persistence.
@@ -84,9 +24,9 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
         - **Cache + Backing Store**: Fast in-memory cache with database persistence
         - **Automatic Fallback**: If not found in cache, loads from database
         - **Write-Through**: All writes go to both cache and database
-        - **Database Support**: SQLite, PostgreSQL, MySQL via connection strings
+        - **Database Support**: SQLite and PostgreSQL via connection strings
     
-    Usage:
+    Usage Examples:
         Basic (cache-only):
             store = InMemSignalProtocolStore(identity_key_pair, registration_id)
         
@@ -106,6 +46,7 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
                 connection_string="postgresql://user:pass@localhost/signal",
                 device_jid="alice@example.com"
             )
+            await store.migrate()
     """
 
     def __init__(
@@ -114,30 +55,36 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
         registration_id: int,
         connection_string: Optional[str] = None,
         device_jid: Optional[str] = None
-    ) -> 'InMemSignalProtocolStore':
+    ) -> None:
         """
         Create a Signal Protocol store with optional database persistence.
         
         Args:
             key_pair: Identity key pair for this device
-            registration_id: Registration ID for this device
+            registration_id: Registration ID for this device  
             connection_string: Optional database URL (e.g., "sqlite://signal.db")
             device_jid: Optional unique device identifier (required if connection_string is provided)
             
-        Returns:
-            Store instance (async if persistence is enabled, sync otherwise)
+        Raises:
+            ValueError: If only one of connection_string/device_jid is provided
+            RuntimeError: If database connection fails
         
         Examples:
-            # In-memory only (synchronous)
+            # In-memory only
             store = InMemSignalProtocolStore(identity_key_pair, 123)
             
-            # With persistence (asynchronous - use await)
+            # With SQLite persistence  
             store = InMemSignalProtocolStore(
                 identity_key_pair,
                 123,
                 connection_string="sqlite://signal.db",
                 device_jid="alice@example.com"
             )
+            await store.migrate()  # Set up database tables
+            
+        Note:
+            Both connection_string and device_jid must be provided together,
+            or both omitted for cache-only operation.
         """
         ...
     
@@ -204,6 +151,59 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
         if persistence is enabled. Faster than load_session for existence checks.
         """
         ...
+    
+    def delete_session(self, recipient_name: str, recipient_device_id: int) -> bool:
+        """
+        Delete a specific session.
+        
+        Args:
+            recipient_name: The recipient name
+            recipient_device_id: The recipient device ID
+            
+        Returns:
+            True if session existed and was deleted, False if it didn't exist
+            
+        Note:
+            Only available when persistence is enabled.
+        """
+        ...
+    
+    def delete_all_sessions_for_user(self, recipient_name: str) -> int:
+        """
+        Delete all sessions for a specific user (all device IDs).
+        
+        Args:
+            recipient_name: The recipient name to delete sessions for
+            
+        Returns:
+            Number of sessions deleted
+            
+        Note:
+            Only available when persistence is enabled.
+        """
+        ...
+
+    # Identity store methods - Cache + backing store implementation
+    def get_identity(self, address: ProtocolAddress) -> Optional[IdentityKey]:
+        """
+        Get identity key for the given address.
+        
+        Uses cache + backing store: checks cache first, falls back to database
+        if persistence is enabled.
+        """
+        ...
+    
+    def save_identity(self, address: ProtocolAddress, identity_key: IdentityKey) -> bool:
+        """
+        Save identity key for the given address.
+        
+        Uses cache + backing store: stores to both cache and database
+        (if persistence is enabled).
+        
+        Returns:
+            True if this is a new identity or if the identity changed
+        """
+        ...
 
     # PreKey store methods - Cache + backing store implementation  
     def get_pre_key(self, pre_key_id: int) -> PreKeyRecord:
@@ -264,6 +264,30 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
         """
         ...
 
+    # Resource management
+    def close(self) -> None:
+        """
+        Close the store and clean up resources.
+        
+        This method closes database connections and cleans up resources.
+        After calling this method, the store should not be used for database operations.
+        
+        Examples:
+            # Basic usage
+            store = InMemSignalProtocolStore(key_pair, reg_id, "sqlite://db.sqlite", "user@example.com")
+            try:
+                # Use store...
+                pass
+            finally:
+                store.close()
+                
+            # Context manager pattern
+            store = InMemSignalProtocolStore(key_pair, reg_id, "sqlite://db.sqlite", "user@example.com")
+            store.close()  # Safe to call multiple times
+        """
+        ...
+
+
 def init_logging() -> None:
     """Initialize logging for the signal-protocol library.
 
@@ -277,4 +301,4 @@ def init_logging() -> None:
     """
     ...
 
-__all__ = ["PersistentStorageBase", "InMemSignalProtocolStore", "init_logging"]
+__all__ = ["InMemSignalProtocolStore", "init_logging"]

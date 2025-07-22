@@ -113,6 +113,14 @@ impl PersistenceManager {
     pub fn pool(&self) -> &AnyPool {
         &self.pool
     }
+
+    /// Close the database connection pool
+    /// 
+    /// This method closes all connections in the pool and cleans up resources.
+    /// After calling this method, the persistence manager should not be used for database operations.
+    pub async fn close(&mut self) {
+        self.pool.close().await;
+    }
 }
 
 // Sub-modules for different storage implementations
