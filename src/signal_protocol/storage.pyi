@@ -275,6 +275,95 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
             ])
         """
         ...
+
+    async def delete_all_identities(self, phone: str) -> int:
+        """
+        Delete all identity keys for recipients whose names start with the given phone number.
+        
+        This helper function deletes all identity keys where the recipient name starts with
+        the specified phone number followed by a colon (e.g., "1234567890:").
+        
+        Args:
+            phone: Phone number string to match against recipient names
+            
+        Returns:
+            Number of identity keys deleted
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            # Delete all identity keys for phone number "1234567890"
+            # This will delete identities for recipients like:
+            # - "1234567890:1" 
+            # - "1234567890:2"
+            # - "1234567890:device_id"
+            deleted_count = await store.delete_all_identities("1234567890")
+            print(f"Deleted {deleted_count} identity keys")
+            
+        Warning:
+            This operation cannot be undone. Use with caution as it will remove
+            all trust relationships for the specified phone number.
+        """
+        ...
+
+    async def delete_identity(self, address: str) -> bool:
+        """
+        Delete a specific identity key for a given address.
+        
+        This method deletes the identity key for a specific recipient address.
+        The address should be in the format "recipient_name:device_id".
+        
+        Args:
+            address: Address string in format "recipient_name:device_id"
+            
+        Returns:
+            True if an identity was found and deleted, False if no identity was found
+            
+        Raises:
+            ValueError: If the address format is invalid
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            # Delete identity for a specific recipient and device
+            was_deleted = await store.delete_identity("1234567890:1")
+            if was_deleted:
+                print("Identity deleted successfully")
+            else:
+                print("No identity found for that address")
+                
+            # Examples of valid address formats:
+            await store.delete_identity("phone:123:1")       # Phone with colon
+            await store.delete_identity("user@domain.com:2") # Email-like recipient
+            await store.delete_identity("simple_user:1")     # Simple name
+            
+        Warning:
+            This operation cannot be undone. The identity will need to be 
+            re-established through the normal Signal Protocol handshake.
+        """
+        ...
     
     # Signed PreKey store methods - Cache + backing store implementation
     def get_signed_pre_key(self, signed_pre_key_id: int) -> SignedPreKeyRecord:

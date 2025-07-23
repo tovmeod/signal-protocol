@@ -184,6 +184,119 @@ impl IdentityKeyStore for PersistenceManager {
     }
 }
 
+impl PersistenceManager {
+    /// Delete all identity keys for recipients whose names start with the given phone number
+    pub async fn delete_all_identities(
+        &self,
+        phone: &str,
+    ) -> Result<u64, SignalProtocolError> {
+        debug!(
+            "Deleting all identities for phone prefix '{}' (device: {})",
+            phone,
+            self.device_jid
+        );
+
+        let pattern = format!("{}:%", phone);
+        eprintln!("DEBUG delete_all_identities: device_jid={}, phone={}, pattern={}", 
+                 self.device_jid, phone, pattern);
+        
+        // Debug: Check what identities exist before deletion
+        let check_result = sqlx::query_as::<_, (String,)>(
+            "SELECT recipient_name FROM signal_identity_keys WHERE device_jid = ?"
+        )
+        .bind(&self.device_jid)
+        .fetch_all(self.pool())
+        .await;
+        
+        match check_result {
+            Ok(rows) => {
+                let names: Vec<String> = rows.into_iter().map(|(name,)| name).collect();
+                eprintln!("DEBUG delete_all_identities: existing identities = {:?}", names);
+            }
+            Err(e) => eprintln!("DEBUG delete_all_identities: error checking existing identities = {:?}", e),
+        }
+        
+        let delete_result = sqlx::query(
+            "DELETE FROM signal_identity_keys WHERE device_jid = ? AND recipient_name LIKE ?"
+        )
+        .bind(&self.device_jid)
+        .bind(&pattern)
+        .execute(self.pool())
+        .await;
+
+        match delete_result {
+            Ok(result) => {
+                let rows_affected = result.rows_affected();
+                debug!("Successfully deleted {} identity keys for phone prefix '{}'", rows_affected, phone);
+                Ok(rows_affected)
+            }
+            Err(e) => {
+                error!("Database error deleting identities for phone prefix '{}': {}", phone, e);
+                Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    /// Delete a specific identity key for a given address
+    pub async fn delete_identity(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<bool, SignalProtocolError> {
+        debug!(
+            "Deleting identity for {}:{} (device: {})",
+            address.name(),
+            address.device_id(),
+            self.device_jid
+        );
+
+        eprintln!("DEBUG delete_identity: device_jid={}, recipient_name={}, recipient_device_id={}", 
+                 self.device_jid, address.name(), address.device_id());
+        
+        // Debug: Check what identities exist before deletion
+        let check_result = sqlx::query_as::<_, (String, i32)>(
+            "SELECT recipient_name, recipient_device_id FROM signal_identity_keys WHERE device_jid = ?"
+        )
+        .bind(&self.device_jid)
+        .fetch_all(self.pool())
+        .await;
+        
+        match check_result {
+            Ok(rows) => {
+                let records: Vec<String> = rows.into_iter().map(|(name, dev_id)| format!("{}:{}", name, dev_id)).collect();
+                eprintln!("DEBUG delete_identity: existing identities = {:?}", records);
+            }
+            Err(e) => eprintln!("DEBUG delete_identity: error checking existing identities = {:?}", e),
+        }
+
+        let delete_result = sqlx::query(
+            "DELETE FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ? AND recipient_device_id = ?"
+        )
+        .bind(&self.device_jid)
+        .bind(address.name())
+        .bind(address.device_id() as i32)
+        .execute(self.pool())
+        .await;
+
+        match delete_result {
+            Ok(result) => {
+                let rows_affected = result.rows_affected();
+                eprintln!("DEBUG delete_identity: rows_affected = {}", rows_affected);
+                let deleted = rows_affected > 0;
+                if deleted {
+                    debug!("Successfully deleted identity for {}:{}", address.name(), address.device_id());
+                } else {
+                    debug!("No identity found to delete for {}:{}", address.name(), address.device_id());
+                }
+                Ok(deleted)
+            }
+            Err(e) => {
+                error!("Database error deleting identity for {}:{}: {}", address.name(), address.device_id(), e);
+                Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

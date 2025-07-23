@@ -315,6 +315,53 @@ impl InMemSignalProtocolStore {
             ))
         }
     }
+
+    /// Delete all identity keys for recipients whose names start with the given phone number
+    fn delete_all_identities<'py>(&self, py: Python<'py>, phone: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.delete_all_identities(&phone).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to delete identities: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Identity deletion only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Delete a specific identity key for a given address string
+    fn delete_identity<'py>(&self, py: Python<'py>, address_str: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                // Parse the address string to extract recipient_name and device_id
+                // Expected format: "recipient_name:device_id"
+                let address = match crate::address::parse_address_string(&address_str) {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            format!("Invalid address format '{}': {}", address_str, e)
+                        ));
+                    }
+                };
+
+                let result = persistence_clone.delete_identity(&address).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to delete identity: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Identity deletion only available when persistence is enabled"
+            ))
+        }
+    }
 }
 
 // Implement the libsignal traits for our wrapper using cache + backing store pattern
