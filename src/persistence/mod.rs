@@ -121,6 +121,188 @@ impl PersistenceManager {
     pub async fn close(&mut self) {
         self.pool.close().await;
     }
+
+    /// Migrate sessions, identity keys, and sender keys from phone number to LID (Link ID)
+    /// 
+    /// This method performs atomic migration of all Signal Protocol data associated
+    /// with a phone number to a Link ID format. It handles sessions, identity keys,
+    /// and sender keys in a single transaction.
+    /// 
+    /// # Arguments
+    /// * `pn_signal` - Phone number in signal address format
+    /// * `lid_signal` - Link ID in signal address format
+    /// 
+    /// # Returns
+    /// Returns a tuple of (sessions_updated, identity_keys_updated, sender_keys_updated)
+    /// 
+    /// # Behavior
+    /// - Attempts to UPDATE existing records to new LID format
+    /// - On conflict (LID already exists), ignores the update
+    /// - Always deletes the old phone number records after migration attempt
+    /// - All operations are performed in a single transaction for atomicity
+    pub async fn migrate_pn_to_lid(
+        &self,
+        pn_signal: &str,
+        lid_signal: &str,
+    ) -> Result<(u64, u64, u64), libsignal_protocol_rust::SignalProtocolError> {
+        use log::{info, warn};
+        
+        let mut sessions_updated = 0u64;
+        let mut identity_keys_updated = 0u64;
+        let mut sender_keys_updated = 0u64;
+
+        // Start a transaction for atomic migration
+        let mut tx = self.pool.begin().await
+            .map_err(|e| libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                format!("Failed to start transaction: {}", e)
+            ))?;
+
+        // 1. Migrate Sessions
+        // Try to update sessions to new LID - conflicts will be ignored
+        let sessions_result = sqlx::query(
+            "UPDATE signal_sessions SET recipient_name = ? WHERE device_jid = ? AND recipient_name = ?"
+        )
+        .bind(lid_signal)
+        .bind(&self.device_jid)
+        .bind(pn_signal)
+        .execute(&mut *tx)
+        .await;
+
+        match sessions_result {
+            Ok(result) => {
+                sessions_updated = result.rows_affected();
+            }
+            Err(e) => {
+                // Log conflict but continue - this is expected if LID sessions already exist
+                warn!("Could not migrate all sessions from {} to {} due to existing LID sessions: {}", 
+                      pn_signal, lid_signal, e);
+            }
+        }
+
+        // Always delete old phone number sessions after migration attempt
+        let _delete_sessions = sqlx::query(
+            "DELETE FROM signal_sessions WHERE device_jid = ? AND recipient_name = ?"
+        )
+        .bind(&self.device_jid)
+        .bind(pn_signal)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+            format!("Failed to delete old sessions: {}", e)
+        ))?;
+
+        // 2. Migrate Identity Keys
+        // Try to update identity keys to new LID - conflicts will be ignored
+        let identity_result = sqlx::query(
+            "UPDATE signal_identity_keys SET recipient_name = ? WHERE device_jid = ? AND recipient_name = ?"
+        )
+        .bind(lid_signal)
+        .bind(&self.device_jid)
+        .bind(pn_signal)
+        .execute(&mut *tx)
+        .await;
+
+        match identity_result {
+            Ok(result) => {
+                identity_keys_updated = result.rows_affected();
+            }
+            Err(e) => {
+                // Log conflict but continue
+                warn!("Could not migrate all identity keys from {} to {} due to existing LID keys: {}", 
+                      pn_signal, lid_signal, e);
+            }
+        }
+
+        // Always delete old phone number identity keys after migration attempt
+        let _delete_identities = sqlx::query(
+            "DELETE FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ?"
+        )
+        .bind(&self.device_jid)
+        .bind(pn_signal)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+            format!("Failed to delete old identity keys: {}", e)
+        ))?;
+
+        // 3. Migrate Sender Keys - both chat_id and sender_name fields
+        // 3a. Migrate sender keys where chat_id matches (group keys for this phone number)
+        let sender_chat_result = sqlx::query(
+            "UPDATE signal_sender_keys SET group_id = ? WHERE device_jid = ? AND group_id = ?"
+        )
+        .bind(lid_signal)
+        .bind(&self.device_jid)
+        .bind(pn_signal)
+        .execute(&mut *tx)
+        .await;
+
+        match sender_chat_result {
+            Ok(result) => {
+                sender_keys_updated += result.rows_affected();
+            }
+            Err(e) => {
+                warn!("Could not migrate sender keys (group_id) from {} to {} due to existing LID keys: {}", 
+                      pn_signal, lid_signal, e);
+            }
+        }
+
+        // 3b. Migrate sender keys where sender_name matches (keys from this phone number in groups)
+        let sender_name_result = sqlx::query(
+            "UPDATE signal_sender_keys SET sender_name = ? WHERE device_jid = ? AND sender_name = ?"
+        )
+        .bind(lid_signal)
+        .bind(&self.device_jid)
+        .bind(pn_signal)
+        .execute(&mut *tx)
+        .await;
+
+        match sender_name_result {
+            Ok(result) => {
+                sender_keys_updated += result.rows_affected();
+            }
+            Err(e) => {
+                warn!("Could not migrate sender keys (sender_name) from {} to {} due to existing LID keys: {}", 
+                      pn_signal, lid_signal, e);
+            }
+        }
+
+        // Always delete old phone number sender keys after migration attempt
+        let _delete_sender_chat = sqlx::query(
+            "DELETE FROM signal_sender_keys WHERE device_jid = ? AND group_id = ?"
+        )
+        .bind(&self.device_jid)
+        .bind(pn_signal)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+            format!("Failed to delete old sender keys (group_id): {}", e)
+        ))?;
+
+        let _delete_sender_name = sqlx::query(
+            "DELETE FROM signal_sender_keys WHERE device_jid = ? AND sender_name = ?"
+        )
+        .bind(&self.device_jid)
+        .bind(pn_signal)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+            format!("Failed to delete old sender keys (sender_name): {}", e)
+        ))?;
+
+        // Commit the transaction
+        tx.commit().await
+            .map_err(|e| libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
+                format!("Failed to commit migration transaction: {}", e)
+            ))?;
+
+        // Log successful migration if any data was migrated
+        if sessions_updated > 0 || identity_keys_updated > 0 || sender_keys_updated > 0 {
+            info!("Migrated {} sessions, {} identity keys and {} sender keys from {} to {}", 
+                  sessions_updated, identity_keys_updated, sender_keys_updated, pn_signal, lid_signal);
+        }
+
+        Ok((sessions_updated, identity_keys_updated, sender_keys_updated))
+    }
 }
 
 // Sub-modules for different storage implementations

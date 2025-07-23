@@ -268,6 +268,65 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
         """
         ...
 
+    async def migrate_pn_to_lid(self, pn_signal: str, lid_signal: str) -> Tuple[int, int, int]:
+        """
+        Migrate sessions, identity keys, and sender keys from phone number to LID.
+        
+        This method performs atomic migration of all Signal Protocol data associated
+        with a phone number to a LID (Link ID) format. It handles sessions, identity keys,
+        and sender keys in a single transaction.
+        
+        The migration process:
+        1. Attempts to UPDATE existing records to the new LID format
+        2. If conflicts occur (LID already exists), ignores the update and logs a warning
+        3. Always deletes the old phone number records after migration attempt
+        4. All operations are performed in a single database transaction for atomicity
+        
+        Args:
+            pn_signal: Phone number in signal address format (e.g., "1234567890")
+            lid_signal: Link ID in signal address format (e.g., "lid:abc123")
+            
+        Returns:
+            Tuple of (sessions_updated, identity_keys_updated, sender_keys_updated)
+            representing the number of records successfully migrated for each type
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            SignalProtocolError: If database transaction fails
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            # Migrate from phone number to LID
+            sessions, identities, sender_keys = await store.migrate_pn_to_lid(
+                "1234567890", 
+                "lid:abc123def456"
+            )
+            print(f"Migrated {sessions} sessions, {identities} identities, {sender_keys} sender keys")
+            
+        Warning:
+            This operation modifies data in place. While it attempts to preserve
+            existing LID data by ignoring conflicts, the phone number data is
+            always deleted after the migration attempt. Ensure you have backups
+            if this data is critical.
+            
+        Typical Use Case:
+            This method is designed for WhatsApp-style migrations where users
+            transition from phone number-based addressing to Link ID addressing.
+            It ensures all Signal Protocol cryptographic state is properly migrated
+            while maintaining data integrity.
+        """
+        ...
+
     # Identity store methods - Cache + backing store implementation
     def get_identity(self, address: ProtocolAddress) -> Optional[IdentityKey]:
         """

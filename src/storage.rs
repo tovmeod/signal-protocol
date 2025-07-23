@@ -351,6 +351,37 @@ impl InMemSignalProtocolStore {
         }
     }
 
+    /// Migrate sessions, identity keys, and sender keys from phone number to LID
+    /// 
+    /// This method performs atomic migration of all Signal Protocol data associated
+    /// with a phone number to a LID (Link ID) format. It handles sessions, identity keys,
+    /// and sender keys in a single transaction.
+    /// 
+    /// The migration process:
+    /// 1. Attempts to UPDATE existing records to the new LID format
+    /// 2. If conflicts occur (LID already exists), ignores the update
+    /// 3. Always deletes the old phone number records after migration attempt
+    /// 4. All operations are performed in a single database transaction
+    /// 
+    /// Returns a tuple of (sessions_updated, identity_keys_updated, sender_keys_updated)
+    fn migrate_pn_to_lid<'py>(&self, py: Python<'py>, pn_signal: String, lid_signal: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.migrate_pn_to_lid(&pn_signal, &lid_signal).await
+                    .map_err(crate::error::SignalProtocolError::new_err)?;
+                
+                // Convert the tuple to a Python tuple
+                let (sessions_updated, identity_keys_updated, sender_keys_updated) = result;
+                Ok((sessions_updated, identity_keys_updated, sender_keys_updated))
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Migration only available when persistence is enabled"
+            ))
+        }
+    }
+
     /// Mark a pre-key as uploaded (only available when persistence is enabled)
     fn mark_pre_key_uploaded<'py>(&self, py: Python<'py>, pre_key_id: u32) -> PyResult<Bound<'py, PyAny>> {
         if let Some(ref persistence) = self.persistence_manager {
