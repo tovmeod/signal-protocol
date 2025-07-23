@@ -169,6 +169,169 @@ impl PersistenceManager {
             }
         }
     }
+
+    /// Get the next available pre-key ID
+    pub async fn get_next_pre_key_id(&self) -> Result<u32, SignalProtocolError> {
+        debug!("Getting next pre-key ID for device: {}", self.device_jid);
+
+        let max_id_result = sqlx::query_as::<_, (Option<i32>,)>(
+            "SELECT MAX(key_id) FROM signal_pre_keys WHERE device_jid = ?"
+        )
+        .bind(&self.device_jid)
+        .fetch_one(self.pool())
+        .await;
+
+        match max_id_result {
+            Ok((max_id,)) => {
+                let next_id = max_id.map_or(1, |id| id + 1) as u32;
+                debug!("Next pre-key ID for device {}: {}", self.device_jid, next_id);
+                Ok(next_id)
+            }
+            Err(e) => {
+                error!("Database error getting next pre-key ID for device {}: {}", self.device_jid, e);
+                Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    /// Get existing non-uploaded pre-keys, ordered by key_id
+    /// Returns a vector of (key_id, serialized_pre_key_record)
+    pub async fn get_non_uploaded_pre_keys(&self, limit: Option<u32>) -> Result<Vec<(u32, Vec<u8>)>, SignalProtocolError> {
+        debug!("Getting non-uploaded pre-keys for device: {}", self.device_jid);
+
+        let query = if let Some(limit) = limit {
+            format!(
+                "SELECT key_id, key_data FROM signal_pre_keys WHERE device_jid = ? AND uploaded = 0 ORDER BY key_id LIMIT {}",
+                limit
+            )
+        } else {
+            "SELECT key_id, key_data FROM signal_pre_keys WHERE device_jid = ? AND uploaded = 0 ORDER BY key_id".to_string()
+        };
+
+        let keys_result = sqlx::query_as::<_, (i32, Vec<u8>)>(&query)
+            .bind(&self.device_jid)
+            .fetch_all(self.pool())
+            .await;
+
+        match keys_result {
+            Ok(keys) => {
+                let result: Vec<(u32, Vec<u8>)> = keys.into_iter()
+                    .map(|(key_id, data)| (key_id as u32, data))
+                    .collect();
+                debug!("Found {} non-uploaded pre-keys for device {}", result.len(), self.device_jid);
+                Ok(result)
+            }
+            Err(e) => {
+                error!("Database error getting non-uploaded pre-keys for device {}: {}", self.device_jid, e);
+                Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    /// Mark pre-keys as uploaded up to the given ID (inclusive)
+    pub async fn mark_pre_keys_as_uploaded_up_to(&self, up_to_id: u32) -> Result<u64, SignalProtocolError> {
+        debug!("Marking pre-keys up to ID {} as uploaded for device: {}", up_to_id, self.device_jid);
+
+        // Use INTEGER 1 instead of TRUE for SQLx Any driver compatibility with BOOLEAN columns
+        let update_result = sqlx::query(
+            "UPDATE signal_pre_keys SET uploaded = 1 WHERE device_jid = ? AND key_id <= ?"
+        )
+        .bind(&self.device_jid)
+        .bind(up_to_id as i32)
+        .execute(self.pool())
+        .await;
+
+        match update_result {
+            Ok(result) => {
+                let updated = result.rows_affected();
+                debug!("Marked {} pre-keys up to ID {} as uploaded", updated, up_to_id);
+                Ok(updated)
+            }
+            Err(e) => {
+                error!("Database error marking pre-keys up to ID {} as uploaded: {}", up_to_id, e);
+                Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    /// Get the count of uploaded pre-keys
+    pub async fn uploaded_prekey_count(&self) -> Result<u64, SignalProtocolError> {
+        debug!("Getting uploaded pre-key count for device: {}", self.device_jid);
+
+        let count_result = sqlx::query_as::<_, (i64,)>(
+            "SELECT COUNT(*) FROM signal_pre_keys WHERE device_jid = ? AND uploaded = 1"
+        )
+        .bind(&self.device_jid)
+        .fetch_one(self.pool())
+        .await;
+
+        match count_result {
+            Ok((count,)) => {
+                debug!("Found {} uploaded pre-keys for device {}", count, self.device_jid);
+                Ok(count as u64)
+            }
+            Err(e) => {
+                error!("Database error getting uploaded pre-key count for device {}: {}", self.device_jid, e);
+                Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
+            }
+        }
+    }
+
+    /// Generate and save a pre-key with the given ID
+    /// Returns the serialized PreKeyRecord data
+    pub async fn generate_and_save_pre_key(&self, key_id: u32, mark_uploaded: bool) -> Result<Vec<u8>, SignalProtocolError> {
+        debug!("Generating and saving pre-key {} (uploaded={}) for device: {}", key_id, mark_uploaded, self.device_jid);
+
+        // Check if a pre-key with this ID already exists
+        let existing_result = sqlx::query_as::<_, (Vec<u8>,)>(
+            "SELECT key_data FROM signal_pre_keys WHERE device_jid = ? AND key_id = ?"
+        )
+        .bind(&self.device_jid)
+        .bind(key_id as i32)
+        .fetch_optional(self.pool())
+        .await;
+
+        match existing_result {
+            Ok(Some((existing_data,))) => {
+                debug!("Pre-key {} already exists for device {}, returning existing key", key_id, self.device_jid);
+                Ok(existing_data)
+            }
+            Ok(None) => {
+                // Generate new pre-key (using OsRng which is Send)
+                let pre_key_pair = libsignal_protocol_rust::KeyPair::generate(&mut rand::rngs::OsRng);
+                let pre_key_record = libsignal_protocol_rust::PreKeyRecord::new(key_id, &pre_key_pair);
+                let pre_key_data = pre_key_record.serialize()
+                    .map_err(|e| SignalProtocolError::InvalidArgument(format!("Pre-key serialization failed: {}", e)))?;
+
+                // Save to database
+                let uploaded_value = if mark_uploaded { 1 } else { 0 };
+                let insert_result = sqlx::query(
+                    "INSERT INTO signal_pre_keys (device_jid, key_id, key_data, uploaded) VALUES (?, ?, ?, ?)"
+                )
+                .bind(&self.device_jid)
+                .bind(key_id as i32)
+                .bind(&pre_key_data)
+                .bind(uploaded_value)
+                .execute(self.pool())
+                .await;
+
+                match insert_result {
+                    Ok(_) => {
+                        debug!("Successfully generated and saved pre-key {} for device {}", key_id, self.device_jid);
+                        Ok(pre_key_data.to_vec())
+                    }
+                    Err(e) => {
+                        error!("Database error saving generated pre-key {} for device {}: {}", key_id, self.device_jid, e);
+                        Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Database error checking existing pre-key {} for device {}: {}", key_id, self.device_jid, e);
+                Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

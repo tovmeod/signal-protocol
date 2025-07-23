@@ -1,5 +1,5 @@
 # Typing stub for signal_protocol.storage module
-from typing import Optional
+from typing import Optional, List, Tuple
 
 # Import directly from native extension submodules
 from ._signal_protocol.storage import (
@@ -362,6 +362,186 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
         Warning:
             This operation cannot be undone. The identity will need to be 
             re-established through the normal Signal Protocol handshake.
+        """
+        ...
+
+    # Pre-key helper methods for advanced key management
+
+    async def get_next_pre_key_id(self) -> int:
+        """
+        Get the next available pre-key ID.
+        
+        Returns the next sequential pre-key ID based on existing keys in the database.
+        If no pre-keys exist, returns 1.
+        
+        Returns:
+            The next available pre-key ID
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            next_id = await store.get_next_pre_key_id()
+            print(f"Next pre-key ID: {next_id}")
+        """
+        ...
+
+    async def get_non_uploaded_pre_keys(self, limit: Optional[int] = None) -> List[Tuple[int, bytes]]:
+        """
+        Get existing non-uploaded pre-keys, ordered by key_id.
+        
+        Returns pre-keys that have been generated but not yet marked as uploaded
+        to the server. This is useful for batch uploading operations.
+        
+        Args:
+            limit: Optional maximum number of pre-keys to return
+            
+        Returns:
+            List of tuples (key_id, serialized_pre_key_record)
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            # Get all non-uploaded pre-keys
+            all_keys = await store.get_non_uploaded_pre_keys()
+            print(f"Found {len(all_keys)} non-uploaded pre-keys")
+            
+            # Get only first 10 non-uploaded pre-keys
+            some_keys = await store.get_non_uploaded_pre_keys(limit=10)
+            
+            # Process each key
+            for key_id, serialized_data in all_keys:
+                # Use the serialized_data to reconstruct PreKeyRecord if needed
+                print(f"Pre-key {key_id}: {len(serialized_data)} bytes")
+        """
+        ...
+
+    async def mark_pre_keys_as_uploaded_up_to(self, up_to_id: int) -> int:
+        """
+        Mark pre-keys as uploaded up to the given ID (inclusive).
+        
+        This bulk operation marks all pre-keys with IDs less than or equal to
+        the specified ID as uploaded. Useful after successful batch uploads.
+        
+        Args:
+            up_to_id: Mark all pre-keys with ID <= this value as uploaded
+            
+        Returns:
+            Number of pre-keys that were marked as uploaded
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            # After successfully uploading pre-keys 1-100 to server
+            updated_count = await store.mark_pre_keys_as_uploaded_up_to(100)
+            print(f"Marked {updated_count} pre-keys as uploaded")
+        """
+        ...
+
+    async def uploaded_prekey_count(self) -> int:
+        """
+        Get the count of uploaded pre-keys.
+        
+        Returns the total number of pre-keys that have been marked as uploaded
+        to the server. Useful for monitoring and quota management.
+        
+        Returns:
+            Number of pre-keys marked as uploaded
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            uploaded_count = await store.uploaded_prekey_count()
+            print(f"Currently have {uploaded_count} uploaded pre-keys")
+        """
+        ...
+
+    async def generate_and_save_pre_key(self, key_id: int, mark_uploaded: bool = False) -> bytes:
+        """
+        Generate and save a pre-key with the given ID.
+        
+        Creates a new pre-key with the specified ID and saves it to the database.
+        If a pre-key with this ID already exists, returns the existing key.
+        
+        Args:
+            key_id: The ID for the new pre-key
+            mark_uploaded: Whether to mark the pre-key as uploaded immediately
+            
+        Returns:
+            Serialized PreKeyRecord data
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            # Generate a new pre-key for uploading
+            key_data = await store.generate_and_save_pre_key(42, mark_uploaded=False)
+            print(f"Generated pre-key 42: {len(key_data)} bytes")
+            
+            # Generate a pre-key and mark it as already uploaded
+            uploaded_key = await store.generate_and_save_pre_key(43, mark_uploaded=True)
+            
+            # If key already exists, returns existing data
+            same_key = await store.generate_and_save_pre_key(42, mark_uploaded=False)
+            assert key_data == same_key
         """
         ...
     

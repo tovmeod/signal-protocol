@@ -362,6 +362,105 @@ impl InMemSignalProtocolStore {
             ))
         }
     }
+
+    // Pre-key helper methods
+
+    /// Get the next available pre-key ID
+    fn get_next_pre_key_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.get_next_pre_key_id().await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to get next pre-key ID: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key ID generation only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Get existing non-uploaded pre-keys, ordered by key_id
+    #[pyo3(signature = (limit=None))]
+    fn get_non_uploaded_pre_keys<'py>(&self, py: Python<'py>, limit: Option<u32>) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let keys = persistence_clone.get_non_uploaded_pre_keys(limit).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to get non-uploaded pre-keys: {}", e)
+                    ))?;
+                
+                // Convert to Python list of tuples (key_id, serialized_data)
+                let py_keys: Vec<(u32, Vec<u8>)> = keys;
+                Ok(py_keys)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key retrieval only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Mark pre-keys as uploaded up to the given ID (inclusive)
+    fn mark_pre_keys_as_uploaded_up_to<'py>(&self, py: Python<'py>, up_to_id: u32) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.mark_pre_keys_as_uploaded_up_to(up_to_id).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to mark pre-keys as uploaded: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key upload marking only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Get the count of uploaded pre-keys
+    fn uploaded_prekey_count<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.uploaded_prekey_count().await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to get uploaded pre-key count: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key count only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Generate and save a pre-key with the given ID
+    #[pyo3(signature = (key_id, mark_uploaded=false))]
+    fn generate_and_save_pre_key<'py>(&self, py: Python<'py>, key_id: u32, mark_uploaded: bool) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let pre_key_data = persistence_clone.generate_and_save_pre_key(key_id, mark_uploaded).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to generate and save pre-key: {}", e)
+                    ))?;
+                
+                // Return the serialized PreKeyRecord data
+                Ok(pre_key_data)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key generation only available when persistence is enabled"
+            ))
+        }
+    }
 }
 
 // Implement the libsignal traits for our wrapper using cache + backing store pattern
