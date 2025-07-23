@@ -183,6 +183,91 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
         """
         ...
 
+    # Convenient session deletion wrapper methods
+
+    async def delete_session_by_address(self, address: str) -> bool:
+        """
+        Delete a session by address string (convenient wrapper).
+        
+        This method provides a convenient way to delete sessions using an address string,
+        automatically parsing the recipient name and device ID from the address format.
+        
+        Args:
+            address: Address string in format "recipient_name:device_id" or just "recipient_name"
+                    If no colon is found or device_id is invalid, device_id defaults to 0
+            
+        Returns:
+            True if a session was found and deleted, False if no session was found
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            # Delete session with explicit device ID
+            was_deleted = await store.delete_session_by_address("1234567890:1")
+            
+            # Delete session with default device ID (0)
+            was_deleted = await store.delete_session_by_address("user@example.com")
+            
+            # Handles parsing errors gracefully
+            was_deleted = await store.delete_session_by_address("invalid:format:extra")
+        """
+        ...
+
+    async def delete_all_sessions_by_phone(self, phone: str) -> int:
+        """
+        Delete all sessions for a phone number (convenient wrapper).
+        
+        This method deletes all sessions where the recipient name starts with the
+        specified phone number followed by a colon, matching the typical Signal
+        Protocol address format for phone numbers.
+        
+        Args:
+            phone: Phone number string to match against session recipient names
+            
+        Returns:
+            Number of sessions deleted
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            # Delete all sessions for phone number "1234567890"
+            # This will delete sessions for recipients like:
+            # - "1234567890:1"
+            # - "1234567890:2" 
+            # - "1234567890:device_id"
+            deleted_count = await store.delete_all_sessions_by_phone("1234567890")
+            print(f"Deleted {deleted_count} sessions")
+            
+        Warning:
+            This operation cannot be undone. All session data for the specified
+            phone number will be permanently deleted.
+        """
+        ...
+
     # Identity store methods - Cache + backing store implementation
     def get_identity(self, address: ProtocolAddress) -> Optional[IdentityKey]:
         """

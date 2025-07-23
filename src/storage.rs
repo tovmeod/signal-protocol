@@ -298,6 +298,59 @@ impl InMemSignalProtocolStore {
         }
     }
 
+    // Convenient session deletion wrapper methods
+
+    /// Delete a session by address string (convenient wrapper)
+    fn delete_session_by_address<'py>(&self, py: Python<'py>, address: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                // Parse address string - try "name:device_id" format first
+                let (recipient_name, recipient_device_id) = match address.rsplit_once(':') {
+                    Some((name, device_id_str)) => {
+                        match device_id_str.parse::<i32>() {
+                            Ok(device_id) => (name.to_string(), device_id),
+                            Err(_) => {
+                                // If parsing fails, treat as device_id=0
+                                (address.clone(), 0)
+                            }
+                        }
+                    }
+                    None => {
+                        // No colon found, treat as device_id=0
+                        (address.clone(), 0)
+                    }
+                };
+
+                let result = persistence_clone.delete_session(&recipient_name, recipient_device_id).await
+                    .map_err(crate::error::SignalProtocolError::new_err)?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Session deletion only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Delete all sessions for a phone number (convenient wrapper)
+    fn delete_all_sessions_by_phone<'py>(&self, py: Python<'py>, phone: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                // Create pattern for phone-based sessions: "phone:"
+                let phone_pattern = format!("{}:", phone);
+                let result = persistence_clone.delete_all_sessions_for_user(&phone_pattern).await
+                    .map_err(crate::error::SignalProtocolError::new_err)?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Session deletion only available when persistence is enabled"
+            ))
+        }
+    }
+
     /// Mark a pre-key as uploaded (only available when persistence is enabled)
     fn mark_pre_key_uploaded<'py>(&self, py: Python<'py>, pre_key_id: u32) -> PyResult<Bound<'py, PyAny>> {
         if let Some(ref persistence) = self.persistence_manager {
