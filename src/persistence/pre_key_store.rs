@@ -131,6 +131,46 @@ impl PreKeyStore for PersistenceManager {
     }
 }
 
+impl PersistenceManager {
+    /// Mark a pre-key as uploaded by setting the uploaded flag to true
+    pub async fn mark_pre_key_uploaded(
+        &self,
+        prekey_id: u32,
+    ) -> Result<bool, SignalProtocolError> {
+        debug!(
+            "Marking pre-key {} as uploaded (device: {})",
+            prekey_id,
+            self.device_jid
+        );
+
+        // Use INTEGER 1 instead of TRUE for SQLx Any driver compatibility with BOOLEAN columns
+        let update_result = sqlx::query(
+            "UPDATE signal_pre_keys SET uploaded = 1 WHERE device_jid = ? AND key_id = ?"
+        )
+        .bind(&self.device_jid)
+        .bind(prekey_id as i32)
+        .execute(self.pool())
+        .await;
+
+        match update_result {
+            Ok(result) => {
+                let rows_affected = result.rows_affected();
+                if rows_affected > 0 {
+                    debug!("Successfully marked pre-key {} as uploaded", prekey_id);
+                    Ok(true)
+                } else {
+                    debug!("No pre-key found to mark as uploaded for ID {}", prekey_id);
+                    Ok(false)
+                }
+            }
+            Err(e) => {
+                error!("Database error marking pre-key {} as uploaded: {}", prekey_id, e);
+                Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

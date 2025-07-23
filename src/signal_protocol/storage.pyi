@@ -230,6 +230,52 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
         """
         ...
     
+    async def mark_pre_key_uploaded(self, pre_key_id: int) -> bool:
+        """
+        Mark a pre-key as uploaded.
+        
+        Sets the uploaded flag to True for the specified pre-key in the database.
+        This is useful for tracking which pre-keys have been uploaded to the server.
+        
+        Args:
+            pre_key_id: ID of the pre-key to mark as uploaded
+            
+        Returns:
+            True if the pre-key was found and marked as uploaded, False if not found
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db",
+                device_jid="alice@example.com"
+            )
+            
+            # Save a pre-key
+            pre_key_record = PreKeyRecord(123, key_pair)
+            store.save_pre_key(123, pre_key_record)
+            
+            # Mark it as uploaded to the server (async)
+            was_found = await store.mark_pre_key_uploaded(123)
+            assert was_found == True
+            
+            # Batch operations with asyncio.gather
+            import asyncio
+            pre_key_ids = [100, 101, 102, 103, 104]
+            results = await asyncio.gather(*[
+                store.mark_pre_key_uploaded(key_id) 
+                for key_id in pre_key_ids
+            ])
+        """
+        ...
+    
     # Signed PreKey store methods - Cache + backing store implementation
     def get_signed_pre_key(self, signed_pre_key_id: int) -> SignedPreKeyRecord:
         """

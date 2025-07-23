@@ -297,6 +297,24 @@ impl InMemSignalProtocolStore {
             ))
         }
     }
+
+    /// Mark a pre-key as uploaded (only available when persistence is enabled)
+    fn mark_pre_key_uploaded<'py>(&self, py: Python<'py>, pre_key_id: u32) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.mark_pre_key_uploaded(pre_key_id).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to mark pre-key as uploaded: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key upload marking only available when persistence is enabled"
+            ))
+        }
+    }
 }
 
 // Implement the libsignal traits for our wrapper using cache + backing store pattern
