@@ -63,23 +63,31 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
             key_pair: Identity key pair for this device
             registration_id: Registration ID for this device  
             connection_string: Optional database URL (e.g., "sqlite://signal.db")
-            device_jid: Optional unique device identifier (required if connection_string is provided)
+            device_jid: Optional unique device identifier (can be set later with update_jid)
             
         Raises:
-            ValueError: If only one of connection_string/device_jid is provided
             RuntimeError: If database connection fails
         
         Examples:
             # In-memory only
             store = InMemSignalProtocolStore(identity_key_pair, 123)
             
-            # With SQLite persistence  
+            # With SQLite persistence and JID
             store = InMemSignalProtocolStore(
                 identity_key_pair,
                 123,
                 connection_string="sqlite://signal.db",
                 device_jid="alice@example.com"
             )
+            
+            # With persistence but no JID (for pairing scenarios)
+            store = InMemSignalProtocolStore(
+                identity_key_pair,
+                123,
+                connection_string="sqlite://signal.db"
+            )
+            # Set JID after pairing completes
+            await store.update_jid("alice@example.com")
             await store.migrate()  # Set up database tables
             
         Note:
@@ -686,6 +694,37 @@ class InMemSignalProtocolStore(_InMemSignalProtocolStoreImpl):
             # If key already exists, returns existing data
             same_key = await store.generate_and_save_pre_key(42, mark_uploaded=False)
             assert key_data == same_key
+        """
+        ...
+
+    async def update_jid(self, jid: str) -> None:
+        """
+        Update the JID for this store after successful pairing.
+        
+        This method allows setting the JID after the store was created without one,
+        which is useful during the pairing process where the JID is not known initially.
+        
+        Args:
+            jid: The unique device identifier (JID) to set
+            
+        Raises:
+            RuntimeError: If persistence is not enabled
+            
+        Note:
+            Only available when persistence is enabled.
+            This is an async method and must be awaited.
+            
+        Example:
+            # Create store without JID during pairing
+            store = InMemSignalProtocolStore(
+                identity_key_pair, 
+                registration_id,
+                connection_string="sqlite://signal.db"
+            )
+            
+            # After pairing succeeds, set the JID
+            await store.update_jid("alice@example.com")
+            await store.migrate()  # Ensure database tables are created
         """
         ...
     

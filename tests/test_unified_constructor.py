@@ -55,20 +55,20 @@ def test_constructor_with_file_database():
         assert store.get_local_registration_id() == 124
 
 
-def test_constructor_parameter_validation():
+def test_constructor_parameter_validation(temp_db_path):
     """Test that constructor validates persistence parameters correctly."""
     identity_key_pair = IdentityKeyPair.generate()
     
-    # Should fail if only connection_string is provided
-    with pytest.raises(ValueError, match="Both connection_string and device_jid must be provided together, or both omitted"):
-        InMemSignalProtocolStore(
-            identity_key_pair, 
-            123,
-            connection_string="sqlite::memory:"
-        )
+    # Should now succeed if only connection_string is provided (for pairing scenarios)
+    store_with_conn_only = InMemSignalProtocolStore(
+        identity_key_pair, 
+        123,
+        connection_string=f"sqlite://{temp_db_path}"
+    )
+    assert store_with_conn_only.get_local_registration_id() == 123
     
-    # Should fail if only device_jid is provided
-    with pytest.raises(ValueError, match="Both connection_string and device_jid must be provided together, or both omitted"):
+    # Should fail if only device_jid is provided (connection string is required for persistence)
+    with pytest.raises(ValueError, match="Connection string is required when device_jid is provided"):
         InMemSignalProtocolStore(
             identity_key_pair, 
             123,

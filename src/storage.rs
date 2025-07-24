@@ -51,13 +51,28 @@ impl InMemSignalProtocolStore {
                 ))?;
                 Some(persistence)
             }
+            (Some(conn_str), None) => {
+                // Create persistence without JID (for pairing scenarios)
+                // Serialize the identity key for the device record
+                let identity_key_bytes = key_pair.key.public_key().serialize();
+                
+                // Use centralized Tokio runtime to handle async persistence setup synchronously
+                let persistence = crate::runtime::block_on(PersistenceManager::new_device(
+                    &conn_str,
+                    registration_id,
+                    &identity_key_bytes
+                )).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    format!("Failed to create persistence manager: {}", e)
+                ))?;
+                Some(persistence)
+            }
             (None, None) => {
                 // No persistence
                 None
             }
-            _ => {
+            (None, Some(_)) => {
                 return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    "Both connection_string and device_jid must be provided together, or both omitted"
+                    "Connection string is required when device_jid is provided"
                 ));
             }
         };
@@ -542,6 +557,28 @@ impl InMemSignalProtocolStore {
         } else {
             Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "Pre-key generation only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Update the JID for this store after successful pairing
+    /// 
+    /// This method allows setting the JID after the store was created without one,
+    /// which is useful during the pairing process where the JID is not known initially.
+    fn update_jid<'py>(&mut self, py: Python<'py>, jid: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref mut persistence) = self.persistence_manager {
+            let mut persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                persistence_clone.update_jid(jid).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to update JID: {}", e)
+                    ))?;
+                
+                Ok(())
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "JID update only available when persistence is enabled"
             ))
         }
     }
