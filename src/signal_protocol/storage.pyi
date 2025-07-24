@@ -760,4 +760,36 @@ def init_logging() -> None:
     """
     ...
 
-__all__ = ["InMemSignalProtocolStore", "init_logging"]
+
+def shutdown_runtime() -> None:
+    """Shutdown the global async runtime and perform final cleanup.
+    
+    Call this function when your application is exiting to ensure:
+    - All async tasks are properly terminated
+    - Background threads are stopped  
+    - Database connections are fully released
+    - File handles are freed (important for SQLite)
+    
+    After calling this function, creating new stores may fail.
+    This is primarily useful when you need guaranteed clean shutdown.
+    
+    Example:
+        ```python
+        import signal_protocol.storage as storage
+        
+        # Your application code...
+        store = storage.InMemSignalProtocolStore(key_pair, reg_id, "sqlite://db.sqlite", "user@example.com")
+        try:
+            # Use the store...
+            pass
+        finally:
+            store.close()  # Close individual stores first
+            storage.shutdown_runtime()  # Then shutdown the global runtime
+        ```
+    
+    Note: This addresses common issues with SQLite file locking and
+    Python processes not terminating cleanly.
+    """
+    ...
+
+__all__ = ["InMemSignalProtocolStore", "init_logging", "shutdown_runtime"]

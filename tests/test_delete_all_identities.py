@@ -7,6 +7,18 @@ from signal_protocol.storage import InMemSignalProtocolStore
 from signal_protocol.address import ProtocolAddress
 
 
+def get_device_id_for_jid(db_path, jid):
+    """Helper function to get device_id for a given JID."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", (jid,))
+    result = cursor.fetchone()
+    conn.close()
+    if result is None:
+        raise ValueError(f"No device found for JID: {jid}")
+    return result[0]
+
+
 async def test_delete_all_identities_basic(temp_db_path):
     """Test basic delete_all_identities functionality."""
     key_pair = IdentityKeyPair.generate()
@@ -35,9 +47,16 @@ async def test_delete_all_identities_basic(temp_db_path):
     # Verify all identities were saved
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id_result = cursor.fetchone()
+    assert device_id_result is not None, "Device should exist in database"
+    device_id = device_id_result[0]
+    
+    # Then query using device_id
     cursor.execute(
-        "SELECT recipient_name FROM signal_identity_keys WHERE device_jid = ? ORDER BY recipient_name",
-        ("test@example.com",)
+        "SELECT recipient_name FROM signal_identity_keys WHERE device_id = ? ORDER BY recipient_name",
+        (device_id,)
     )
     saved_names = [row[0] for row in cursor.fetchall()]
     conn.close()
@@ -61,27 +80,28 @@ async def test_delete_all_identities_basic(temp_db_path):
     cursor = conn.cursor()
     
     # Reset the test data for manual verification
-    cursor.execute("DELETE FROM signal_identity_keys WHERE device_jid = ?", ("test@example.com",))
+    device_id = get_device_id_for_jid(temp_db_path, "test@example.com")
+    cursor.execute("DELETE FROM signal_identity_keys WHERE device_id = ?", (device_id,))
     
     # Re-insert test data
     for recipient_name, identity_key in test_identities:
         cursor.execute(
-            "INSERT INTO signal_identity_keys (device_jid, recipient_name, recipient_device_id, identity_key) VALUES (?, ?, ?, ?)",
-            ("test@example.com", recipient_name, 1, identity_key.serialize())
+            "INSERT INTO signal_identity_keys (device_id, recipient_name, recipient_device_id, identity_key) VALUES (?, ?, ?, ?)",
+            (device_id, recipient_name, 1, identity_key.serialize())
         )
     
     # Test the manual query that our implementation uses
     cursor.execute(
-        "DELETE FROM signal_identity_keys WHERE device_jid = ? AND recipient_name LIKE ?",
-        ("test@example.com", f"{test_phone}:%")
+        "DELETE FROM signal_identity_keys WHERE device_id = ? AND recipient_name LIKE ?",
+        (device_id, f"{test_phone}:%")
     )
     manual_deleted = cursor.rowcount
     conn.commit()
     
     # Verify manual deletion worked correctly
     cursor.execute(
-        "SELECT recipient_name FROM signal_identity_keys WHERE device_jid = ? ORDER BY recipient_name",
-        ("test@example.com",)
+        "SELECT recipient_name FROM signal_identity_keys WHERE device_id = ? ORDER BY recipient_name",
+        (device_id,)
     )
     remaining_names = [row[0] for row in cursor.fetchall()]
     conn.close()
@@ -121,7 +141,8 @@ async def test_delete_all_identities_no_matches(temp_db_path):
     # Verify all identities still exist
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM signal_identity_keys WHERE device_jid = ?", ("test@example.com",))
+    device_id = get_device_id_for_jid(temp_db_path, "test@example.com")
+    cursor.execute("SELECT COUNT(*) FROM signal_identity_keys WHERE device_id = ?", (device_id,))
     remaining_count = cursor.fetchone()[0]
     conn.close()
     
@@ -183,9 +204,10 @@ async def test_delete_all_identities_special_characters(temp_db_path):
     # Verify correct identities remain
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
+    device_id = get_device_id_for_jid(temp_db_path, "test@example.com")
     cursor.execute(
-        "SELECT recipient_name FROM signal_identity_keys WHERE device_jid = ? ORDER BY recipient_name",
-        ("test@example.com",)
+        "SELECT recipient_name FROM signal_identity_keys WHERE device_id = ? ORDER BY recipient_name",
+        (device_id,)
     )
     remaining_names = [row[0] for row in cursor.fetchall()]
     conn.close()
@@ -232,9 +254,10 @@ async def test_delete_all_identities_multiple_devices(temp_db_path):
     # Verify only the target phone identities were deleted
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
+    device_id = get_device_id_for_jid(temp_db_path, "test@example.com")
     cursor.execute(
-        "SELECT recipient_name FROM signal_identity_keys WHERE device_jid = ? ORDER BY recipient_name",
-        ("test@example.com",)
+        "SELECT recipient_name FROM signal_identity_keys WHERE device_id = ? ORDER BY recipient_name",
+        (device_id,)
     )
     remaining_names = [row[0] for row in cursor.fetchall()]
     conn.close()
@@ -274,24 +297,25 @@ async def test_delete_all_identities_case_sensitivity(temp_db_path):
     cursor = conn.cursor()
     
     # Reset and re-insert test data for manual verification
-    cursor.execute("DELETE FROM signal_identity_keys WHERE device_jid = ?", ("test@example.com",))
+    device_id = get_device_id_for_jid(temp_db_path, "test@example.com")
+    cursor.execute("DELETE FROM signal_identity_keys WHERE device_id = ?", (device_id,))
     for recipient_name, identity_key in test_identities:
         cursor.execute(
-            "INSERT INTO signal_identity_keys (device_jid, recipient_name, recipient_device_id, identity_key) VALUES (?, ?, ?, ?)",
-            ("test@example.com", recipient_name, 1, identity_key.serialize())
+            "INSERT INTO signal_identity_keys (device_id, recipient_name, recipient_device_id, identity_key) VALUES (?, ?, ?, ?)",
+            (device_id, recipient_name, 1, identity_key.serialize())
         )
     
     # Test SQLite LIKE behavior manually
     cursor.execute(
-        "DELETE FROM signal_identity_keys WHERE device_jid = ? AND recipient_name LIKE ?",
-        ("test@example.com", "abc123:%")
+        "DELETE FROM signal_identity_keys WHERE device_id = ? AND recipient_name LIKE ?",
+        (device_id, "abc123:%")
     )
     manual_deleted = cursor.rowcount
     conn.commit()
     
     cursor.execute(
-        "SELECT recipient_name FROM signal_identity_keys WHERE device_jid = ? ORDER BY recipient_name",
-        ("test@example.com",)
+        "SELECT recipient_name FROM signal_identity_keys WHERE device_id = ? ORDER BY recipient_name",
+        (device_id,)
     )
     remaining_names = [row[0] for row in cursor.fetchall()]
     conn.close()

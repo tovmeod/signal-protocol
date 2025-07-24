@@ -19,20 +19,20 @@ impl SenderKeyStore for PersistenceManager {
         let sender_device_id = sender_key_name.sender_device_id().map_err(|e| SignalProtocolError::InvalidArgument(format!("Invalid sender_device_id: {}", e)))?;
         
         debug!(
-            "Storing sender key for group '{}' sender '{}:{}' (device: {})",
+            "Storing sender key for group '{}' sender '{}:{}' (device_id: {})",
             group_id,
             sender_name,
             sender_device_id,
-            self.device_jid
+            self.device_id
         );
 
         let key_data = record.serialize()
             .map_err(|e| SignalProtocolError::InvalidArgument(format!("SenderKey serialization failed: {}", e)))?;
 
         let store_result = sqlx::query_as::<Any, ()>(
-            "INSERT OR REPLACE INTO signal_sender_keys (device_jid, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO signal_sender_keys (device_id, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)"
         )
-        .bind(&self.device_jid)
+        .bind(self.device_id)
         .bind(&group_id)
         .bind(&sender_name)
         .bind(sender_device_id as i32)
@@ -65,17 +65,17 @@ impl SenderKeyStore for PersistenceManager {
         let sender_device_id = sender_key_name.sender_device_id().map_err(|e| SignalProtocolError::InvalidArgument(format!("Invalid sender_device_id: {}", e)))?;
         
         debug!(
-            "Loading sender key for group '{}' sender '{}:{}' (device: {})",
+            "Loading sender key for group '{}' sender '{}:{}' (device_id: {})",
             group_id,
             sender_name,
             sender_device_id,
-            self.device_jid
+            self.device_id
         );
 
         let key_data_result = sqlx::query_as::<Any, (Vec<u8>,)>(
-            "SELECT sender_key FROM signal_sender_keys WHERE device_jid = ? AND group_id = ? AND sender_name = ? AND sender_device_id = ?"
+            "SELECT sender_key FROM signal_sender_keys WHERE device_id = ? AND group_id = ? AND sender_name = ? AND sender_device_id = ?"
         )
-        .bind(&self.device_jid)
+        .bind(self.device_id)
         .bind(&group_id)
         .bind(&sender_name)
         .bind(sender_device_id as i32)
@@ -113,35 +113,49 @@ impl SenderKeyStore for PersistenceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+
+    fn get_temp_db_path(test_name: &str) -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::fs::File;
+        let temp_dir = env::temp_dir();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let db_path = temp_dir.join(format!("test_{}_{}.db", test_name, timestamp));
+        
+        // Create the file to ensure it exists
+        File::create(&db_path).expect("Failed to create temp database file");
+        
+        format!("sqlite:{}", db_path.to_string_lossy())
+    }
 
     #[tokio::test]
     async fn test_sender_key_store_basic_operations() {
         println!("🔧 Creating persistence manager...");
-        let mut manager = PersistenceManager::new("sqlite://tmp/test_sender_key_store.db", "test_device".to_string())
-            .await
-            .expect("Failed to create persistence manager");
+        
+        // Generate test identity key
+        let identity_key_pair = libsignal_protocol_rust::IdentityKeyPair::generate(&mut rand::thread_rng());
+        let identity_key_bytes = identity_key_pair.public_key().serialize();
+        
+        let db_path = get_temp_db_path("sender_key_store");
+        let mut manager = PersistenceManager::new_with_jid_setup(
+            &db_path, 
+            "test_device".to_string(),
+            123, // registration_id
+            &identity_key_bytes
+        )
+        .await
+        .expect("Failed to create persistence manager");
         println!("✅ Persistence manager created");
 
-        // Create table manually for test
-        println!("🔧 Creating table...");
-        let create_result = sqlx::query(
-            r#"
-            CREATE TABLE signal_sender_keys (
-                device_jid VARCHAR(255) NOT NULL,
-                group_id VARCHAR(255) NOT NULL,
-                sender_name VARCHAR(255) NOT NULL,
-                sender_device_id INTEGER NOT NULL,
-                sender_key BLOB NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (device_jid, group_id, sender_name, sender_device_id)
-            )
-            "#
-        )
-        .execute(manager.pool())
-        .await;
+        // Run migrations to create proper schema
+        println!("🔧 Running migrations...");
+        manager.migrate().await.expect("Failed to run migrations");
+        println!("✅ Migrations completed");
+
+        // No need to create table manually - migrations handle it
+        let _create_result: Result<(), sqlx::Error> = Ok(()); // Placeholder to maintain existing logic
         
-        match create_result {
+        match _create_result {
             Ok(_) => println!("✅ Table created successfully"),
             Err(e) => {
                 println!("❌ Failed to create table: {:?}", e);

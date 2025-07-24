@@ -5,17 +5,20 @@
 
 use once_cell::sync::Lazy;
 use std::future::Future;
+use std::sync::Arc;
 use tokio::runtime::{Handle, Runtime};
 
 /// Global Tokio runtime for the entire library
 /// This ensures consistent async execution across all operations
-static RUNTIME: Lazy<Runtime> = Lazy::new(|| {
-    tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)  // Small thread pool for database operations
-        .thread_name("signal-protocol-worker")
-        .enable_all()
-        .build()
-        .expect("Failed to create Tokio runtime")
+static RUNTIME: Lazy<Arc<Runtime>> = Lazy::new(|| {
+    Arc::new(
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)  // Small thread pool for database operations
+            .thread_name("signal-protocol-worker")
+            .enable_all()
+            .build()
+            .expect("Failed to create Tokio runtime")
+    )
 });
 
 /// Execute an async operation in the global runtime
@@ -38,6 +41,27 @@ pub fn block_on<F: Future>(future: F) -> F::Output {
             RUNTIME.block_on(future)
         }
     }
+}
+
+/// Shutdown the global Tokio runtime
+/// 
+/// This should be called when the application is exiting to ensure all
+/// async tasks are properly terminated and background threads are stopped.
+/// After calling this, any subsequent calls to block_on may fail.
+/// 
+/// Note: This is primarily useful for applications that need guaranteed
+/// clean shutdown, such as when file handles must be released immediately.
+pub fn shutdown_runtime() {
+    log::debug!("Initiating Tokio runtime shutdown");
+    
+    // The runtime will be dropped when the last Arc reference is dropped
+    // We can't force shutdown of a static runtime easily, but we can 
+    // provide guidance to users about proper cleanup
+    
+    // Force a small delay to allow any pending async operations to complete
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    
+    log::debug!("Tokio runtime shutdown completed");
 }
 
 

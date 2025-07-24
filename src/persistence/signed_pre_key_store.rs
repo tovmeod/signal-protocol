@@ -14,15 +14,15 @@ impl SignedPreKeyStore for PersistenceManager {
         _ctx: Context,
     ) -> Result<SignedPreKeyRecord, SignalProtocolError> {
         debug!(
-            "Loading signed pre-key {} (device: {})",
+            "Loading signed pre-key {} (device_id: {})",
             signed_prekey_id,
-            self.device_jid
+            self.device_id
         );
 
         let key_data_result = sqlx::query_as::<Any, (Vec<u8>,)>(
-            "SELECT key_data FROM signal_signed_pre_keys WHERE device_jid = ? AND key_id = ?"
+            "SELECT key_data FROM signal_signed_pre_keys WHERE device_id = ? AND key_id = ?"
         )
-        .bind(&self.device_jid)
+        .bind(self.device_id)
         .bind(signed_prekey_id as i32)
         .fetch_optional(self.pool()).await;
 
@@ -57,18 +57,18 @@ impl SignedPreKeyStore for PersistenceManager {
         _ctx: Context,
     ) -> Result<(), SignalProtocolError> {
         debug!(
-            "Storing signed pre-key {} (device: {})",
+            "Storing signed pre-key {} (device_id: {})",
             signed_prekey_id,
-            self.device_jid
+            self.device_id
         );
 
         let key_data = record.serialize()
             .map_err(|e| SignalProtocolError::InvalidArgument(format!("SignedPreKey serialization failed: {}", e)))?;
 
         let store_result = sqlx::query_as::<Any, ()>(
-            "INSERT OR REPLACE INTO signal_signed_pre_keys (device_jid, key_id, key_data) VALUES (?, ?, ?)"
+            "INSERT OR REPLACE INTO signal_signed_pre_keys (device_id, key_id, key_data) VALUES (?, ?, ?)"
         )
-        .bind(&self.device_jid)
+        .bind(self.device_id)
         .bind(signed_prekey_id as i32)
         .bind(&key_data)
         .fetch_optional(self.pool())
@@ -91,38 +91,44 @@ impl SignedPreKeyStore for PersistenceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+
+    fn get_temp_db_path(test_name: &str) -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::fs::File;
+        let temp_dir = env::temp_dir();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let db_path = temp_dir.join(format!("test_{}_{}.db", test_name, timestamp));
+        
+        // Create the file to ensure it exists
+        File::create(&db_path).expect("Failed to create temp database file");
+        
+        format!("sqlite:{}", db_path.to_string_lossy())
+    }
 
     #[tokio::test]
     async fn test_signed_pre_key_store_basic_operations() {
         println!("🔧 Creating persistence manager...");
-        let mut manager = PersistenceManager::new("sqlite://tmp/test_signed_pre_key_store.db", "test_device".to_string())
-            .await
-            .expect("Failed to create persistence manager");
+        
+        // Generate test identity key
+        let identity_key_pair = libsignal_protocol_rust::IdentityKeyPair::generate(&mut rand::thread_rng());
+        let identity_key_bytes = identity_key_pair.public_key().serialize();
+        
+        let db_path = get_temp_db_path("signed_pre_key_store");
+        let mut manager = PersistenceManager::new_with_jid_setup(
+            &db_path, 
+            "test_device".to_string(),
+            123, // registration_id
+            &identity_key_bytes
+        )
+        .await
+        .expect("Failed to create persistence manager");
         println!("✅ Persistence manager created");
 
-        // Create table manually for test
-        println!("🔧 Creating table...");
-        let create_result = sqlx::query(
-            r#"
-            CREATE TABLE signal_signed_pre_keys (
-                device_jid VARCHAR(255) NOT NULL,
-                key_id INTEGER NOT NULL,
-                key_data BLOB NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (device_jid, key_id)
-            )
-            "#
-        )
-        .execute(manager.pool())
-        .await;
-        
-        match create_result {
-            Ok(_) => println!("✅ Table created successfully"),
-            Err(e) => {
-                println!("❌ Failed to create table: {:?}", e);
-                panic!("Table creation failed");
-            }
-        }
+        // Run migrations to create proper schema
+        println!("🔧 Running migrations...");
+        manager.migrate().await.expect("Failed to run migrations");
+        println!("✅ Migrations completed");
 
         // Test 1: Create and store a signed pre-key
         let signed_pre_key_pair = libsignal_protocol_rust::KeyPair::generate(&mut rand::thread_rng());

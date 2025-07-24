@@ -41,7 +41,7 @@ impl InMemSignalProtocolStore {
                 let identity_key_bytes = key_pair.key.public_key().serialize();
                 
                 // Use centralized Tokio runtime to handle async persistence setup synchronously
-                let persistence = crate::runtime::block_on(PersistenceManager::new_with_device_setup(
+                let persistence = crate::runtime::block_on(PersistenceManager::new_with_jid_setup(
                     &conn_str, 
                     device_id,
                     registration_id,
@@ -228,7 +228,7 @@ impl InMemSignalProtocolStore {
     /// Get the device JID (only available when persistence is enabled)
     fn device_jid(&self) -> PyResult<String> {
         if let Some(ref persistence) = self.persistence_manager {
-            Ok(persistence.device_jid().to_string())
+            Ok(persistence.device_jid().unwrap_or("").to_string())
         } else {
             Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "Device JID only available when persistence is enabled"
@@ -564,25 +564,40 @@ impl libsignal_protocol_rust::SessionStore for InMemSignalProtocolStore {
             Ok(None) => {
                 // Not in cache, try database if persistence enabled
                 if let Some(ref persistence) = self.persistence_manager {
-                    eprintln!("DEBUG: About to load session from database");
+                    log::debug!("About to load session from database");
                     // We're already in an async context, just await directly
                     let db_result = persistence.load_session(address, ctx).await;
                     
                     match db_result {
                         Ok(Some(session)) => {
-                            // Found in database
-                            eprintln!("DEBUG: Session found in database, skipping cache update for now");
-                            // TODO: Fix cache update mechanism
+                            // Found in database - update cache and return the session
+                            log::debug!("Session found in database, updating cache");
+                            
+                            // Create a copy of the session for cache update to avoid borrowing issues  
+                            let session_copy = session.clone();
+                            let address_copy = address.clone();
+                            
+                            // Get a write lock to update the cache directly (blocking approach)
+                            // This is safer than spawning async tasks with shared state
+                            if let Ok(mut store) = self.store.try_write() {
+                                match store.store_session(&address_copy, &session_copy, None).await {
+                                    Ok(_) => log::debug!("Cache updated successfully for session"),
+                                    Err(e) => log::warn!("Cache update failed for session: {:?}", e),
+                                }
+                            } else {
+                                log::debug!("Could not acquire write lock for cache update, skipping");
+                            }
+                            
                             return Ok(Some(session));
                         }
                         Ok(None) => {
                             // Not found in database either
-                            eprintln!("DEBUG: Session not found in database");
+                            log::debug!("Session not found in database");
                             return Ok(None);
                         }
                         Err(err) => {
                             // Database error should be propagated, not silently ignored
-                            eprintln!("Database error loading session: {:?}", err);
+                            log::error!("Database error loading session: {:?}", err);
                             return Err(err);
                         }
                     }
@@ -609,7 +624,7 @@ impl libsignal_protocol_rust::SessionStore for InMemSignalProtocolStore {
 
         // 2. Store in database if persistence enabled
         if let Some(ref persistence) = self.persistence_manager {
-            eprintln!("DEBUG: About to store session in database");
+            log::debug!("About to store session in database");
             // Clone persistence manager for mutable operations
             let mut persistence_clone = persistence.clone();
             
@@ -619,10 +634,10 @@ impl libsignal_protocol_rust::SessionStore for InMemSignalProtocolStore {
             // Note: This may fail if database is unavailable, but cache is still updated
             match db_result {
                 Ok(()) => {
-                    eprintln!("DEBUG: Session stored successfully in database");
+                    log::debug!("Session stored successfully in database");
                 }
                 Err(err) => {
-                    eprintln!("Database error storing session: {:?}", err);
+                    log::error!("Database error storing session: {:?}", err);
                     // Continue anyway - cache is updated
                 }
             }
@@ -664,7 +679,7 @@ impl libsignal_protocol_rust::IdentityKeyStore for InMemSignalProtocolStore {
             
             // Note: This may fail if database is unavailable, but cache is still updated
             if let Err(err) = db_result {
-                eprintln!("Database error storing identity: {:?}", err);
+                log::error!("Database error storing identity: {:?}", err);
                 // Continue anyway - cache is updated
             }
         }
@@ -705,7 +720,7 @@ impl libsignal_protocol_rust::IdentityKeyStore for InMemSignalProtocolStore {
                         Ok(result) => Ok(result),
                         Err(err) => {
                             // Database error, log but don't fail - trust on first use
-                            eprintln!("Database error checking identity trust: {}", err);
+                            log::error!("Database error checking identity trust: {}", err);
                             Ok(true)
                         }
                     }
@@ -737,9 +752,24 @@ impl libsignal_protocol_rust::IdentityKeyStore for InMemSignalProtocolStore {
                     
                     match db_result {
                         Ok(Some(identity)) => {
-                            // Found in database - return it (cache update temporarily disabled to avoid deadlock)
-                            eprintln!("DEBUG: Identity found in database, returning without cache update");
-                            // TODO: Fix cache update mechanism that doesn't cause deadlocks
+                            // Found in database - update cache and return the identity
+                            log::debug!("Identity found in database, updating cache");
+                            
+                            // Create a copy of the identity for cache update to avoid borrowing issues
+                            let identity_copy = identity.clone();
+                            let address_copy = address.clone();
+                            
+                            // Get a write lock to update the cache directly (blocking approach)
+                            // This is safer than spawning async tasks with shared state
+                            if let Ok(mut store) = self.store.try_write() {
+                                match store.save_identity(&address_copy, &identity_copy, None).await {
+                                    Ok(_) => log::debug!("Cache updated successfully for identity"),
+                                    Err(e) => log::warn!("Cache update failed for identity: {:?}", e),
+                                }
+                            } else {
+                                log::debug!("Could not acquire write lock for cache update, skipping");
+                            }
+                            
                             return Ok(Some(identity));
                         }
                         Ok(None) => {
@@ -748,7 +778,7 @@ impl libsignal_protocol_rust::IdentityKeyStore for InMemSignalProtocolStore {
                         }
                         Err(err) => {
                             // Database error should be propagated, not silently ignored
-                            eprintln!("Database error loading identity: {:?}", err);
+                            log::error!("Database error loading identity: {:?}", err);
                             return Err(err);
                         }
                     }
@@ -793,7 +823,7 @@ impl libsignal_protocol_rust::PreKeyStore for InMemSignalProtocolStore {
                         }
                         Err(err) => {
                             // Database error or not found, return the original cache error
-                            eprintln!("Database error loading pre-key: {}", err);
+                            log::error!("Database error loading pre-key: {}", err);
                             return self.store.read().unwrap().get_pre_key(prekey_id, ctx).await;
                         }
                     }
@@ -821,7 +851,7 @@ impl libsignal_protocol_rust::PreKeyStore for InMemSignalProtocolStore {
             
             // Note: This may fail if database is unavailable, but cache is still updated
             if let Err(err) = db_result {
-                eprintln!("Database error storing pre-key: {}", err);
+                log::error!("Database error storing pre-key: {}", err);
                 // Continue anyway - cache is updated
             }
         }
@@ -844,7 +874,7 @@ impl libsignal_protocol_rust::PreKeyStore for InMemSignalProtocolStore {
             
             // Note: This may fail if database is unavailable, but cache is still updated
             if let Err(err) = db_result {
-                eprintln!("Database error removing pre-key: {}", err);
+                log::error!("Database error removing pre-key: {}", err);
                 // Continue anyway - cache is updated
             }
         }
@@ -875,15 +905,15 @@ impl libsignal_protocol_rust::SignedPreKeyStore for InMemSignalProtocolStore {
                     match db_result {
                         Ok(record) => {
                             // Found in database, update cache before returning
-                            eprintln!("DEBUG: Signed prekey found in database, updating cache");
+                            log::debug!("Signed prekey found in database, updating cache");
                             let mut store = self.store.write().unwrap();
                             store.save_signed_pre_key(signed_prekey_id, &record, ctx).await?;
-                            eprintln!("DEBUG: Signed prekey cache updated successfully");
+                            log::debug!("Signed prekey cache updated successfully");
                             return Ok(record);
                         }
                         Err(err) => {
                             // Database error or not found, return the original cache error
-                            eprintln!("Database error loading signed pre-key: {}", err);
+                            log::error!("Database error loading signed pre-key: {}", err);
                             return self.store.read().unwrap().get_signed_pre_key(signed_prekey_id, ctx).await;
                         }
                     }
@@ -911,7 +941,7 @@ impl libsignal_protocol_rust::SignedPreKeyStore for InMemSignalProtocolStore {
             
             // Note: This may fail if database is unavailable, but cache is still updated
             if let Err(err) = db_result {
-                eprintln!("Database error storing signed pre-key: {}", err);
+                log::error!("Database error storing signed pre-key: {}", err);
                 // Continue anyway - cache is updated
             }
         }
@@ -938,7 +968,7 @@ impl libsignal_protocol_rust::SenderKeyStore for InMemSignalProtocolStore {
             
             // Note: This may fail if database is unavailable, but cache is still updated
             if let Err(err) = db_result {
-                eprintln!("Database error storing sender key: {}", err);
+                log::error!("Database error storing sender key: {}", err);
                 // Continue anyway - cache is updated
             }
         }
@@ -966,10 +996,10 @@ impl libsignal_protocol_rust::SenderKeyStore for InMemSignalProtocolStore {
                     match db_result {
                         Ok(Some(record)) => {
                             // Found in database, update cache before returning
-                            eprintln!("DEBUG: Sender key found in database, updating cache");
+                            log::debug!("Sender key found in database, updating cache");
                             let mut store = self.store.write().unwrap();
                             store.store_sender_key(sender_key_name, &record, ctx).await?;
-                            eprintln!("DEBUG: Sender key cache updated successfully");
+                            log::debug!("Sender key cache updated successfully");
                             return Ok(Some(record));
                         }
                         Ok(None) => {
@@ -978,7 +1008,7 @@ impl libsignal_protocol_rust::SenderKeyStore for InMemSignalProtocolStore {
                         }
                         Err(err) => {
                             // Database error, log but don't fail - just return cache result
-                            eprintln!("Database error loading sender key: {}", err);
+                            log::error!("Database error loading sender key: {}", err);
                             return Ok(None);
                         }
                     }
@@ -998,12 +1028,37 @@ impl libsignal_protocol_rust::SenderKeyStore for InMemSignalProtocolStore {
 /// Initialize logging (no-op for backward compatibility)
 #[pyfunction]
 pub fn init_logging() {
-    // No-op function for backward compatibility with existing tests
+    // For now, keep this as a no-op until we resolve the pyo3-log/async runtime conflict
+    // The issue is that pyo3-log::init() seems to interfere with SQLx's async runtime
+    // when called too early in the Python process lifecycle
+    
+    // TODO: Investigate proper integration of pyo3-log with SQLx async runtime
+    // Possible solutions:
+    // 1. Initialize pyo3-log after the Tokio runtime is created
+    // 2. Use a different logging bridge
+    // 3. Configure pyo3-log to not interfere with async operations
+}
+
+/// Shutdown the global async runtime and perform final cleanup
+/// 
+/// Call this function when your application is exiting to ensure:
+/// - All async tasks are properly terminated
+/// - Background threads are stopped  
+/// - Database connections are fully released
+/// - File handles are freed (important for SQLite)
+/// 
+/// After calling this function, creating new stores may fail.
+/// This is primarily useful when you need guaranteed clean shutdown.
+#[pyfunction]
+pub fn shutdown_runtime() {
+    log::info!("Shutting down signal-protocol runtime");
+    crate::runtime::shutdown_runtime();
 }
 
 /// Initialize the storage submodule for Python
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<InMemSignalProtocolStore>()?;
     module.add_function(wrap_pyfunction!(init_logging, module)?)?;
+    module.add_function(wrap_pyfunction!(shutdown_runtime, module)?)?;
     Ok(())
 }

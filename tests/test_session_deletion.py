@@ -45,10 +45,14 @@ async def test_delete_session_by_address_with_device_id(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     # Check remaining sessions
     cursor.execute(
-        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_jid = ?",
-        ("test@example.com",)
+        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_id = ?",
+        (device_id,)
     )
     remaining_sessions = cursor.fetchall()
     conn.close()
@@ -89,9 +93,13 @@ async def test_delete_session_by_address_without_device_id(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     cursor.execute(
-        "SELECT recipient_device_id FROM signal_sessions WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", "user@example.com")
+        "SELECT recipient_device_id FROM signal_sessions WHERE device_id = ? AND recipient_name = ?",
+        (device_id, "user@example.com")
     )
     remaining_devices = [row[0] for row in cursor.fetchall()]
     conn.close()
@@ -188,9 +196,13 @@ async def test_delete_all_sessions_by_phone(temp_db_path):
     cursor = conn.cursor()
     
     # Check what sessions remain
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     cursor.execute(
-        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_jid = ?",
-        ("test@example.com",)
+        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_id = ?",
+        (device_id,)
     )
     remaining_sessions = cursor.fetchall()
     conn.close()
@@ -256,10 +268,14 @@ async def test_delete_all_sessions_by_phone_partial_match(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     # Test the pattern matching directly
     cursor.execute(
-        "SELECT recipient_name FROM signal_sessions WHERE device_jid = ? AND recipient_name LIKE ?",
-        ("test@example.com", "123:%")
+        "SELECT recipient_name FROM signal_sessions WHERE device_id = ? AND recipient_name LIKE ?",
+        (device_id, "123:%")
     )
     pattern_matches = cursor.fetchall()
     conn.close()
@@ -320,9 +336,13 @@ async def test_session_deletion_workflow(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("workflow@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     cursor.execute(
-        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_jid = ? ORDER BY recipient_name, recipient_device_id",
-        ("workflow@example.com",)
+        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_id = ? ORDER BY recipient_name, recipient_device_id",
+        (device_id,)
     )
     remaining_sessions = cursor.fetchall()
     conn.close()

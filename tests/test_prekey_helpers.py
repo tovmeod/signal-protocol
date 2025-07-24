@@ -157,22 +157,26 @@ async def test_mark_pre_keys_as_uploaded_up_to(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     # Reset for manual verification
-    cursor.execute("UPDATE signal_pre_keys SET uploaded = 0 WHERE device_jid = ?", ("test@example.com",))
+    cursor.execute("UPDATE signal_pre_keys SET uploaded = 0 WHERE device_id = ?", (device_id,))
     conn.commit()
     
     # Test manual query
     cursor.execute(
-        "UPDATE signal_pre_keys SET uploaded = 1 WHERE device_jid = ? AND key_id <= ?",
-        ("test@example.com", 5)
+        "UPDATE signal_pre_keys SET uploaded = 1 WHERE device_id = ? AND key_id <= ?",
+        (device_id, 5)
     )
     manual_updated = cursor.rowcount
     conn.commit()
     
     # Verify manual update worked
     cursor.execute(
-        "SELECT key_id FROM signal_pre_keys WHERE device_jid = ? AND uploaded = 1 ORDER BY key_id",
-        ("test@example.com",)
+        "SELECT key_id FROM signal_pre_keys WHERE device_id = ? AND uploaded = 1 ORDER BY key_id",
+        (device_id,)
     )
     uploaded_ids = [row[0] for row in cursor.fetchall()]
     conn.close()

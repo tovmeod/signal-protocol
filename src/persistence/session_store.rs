@@ -1,7 +1,7 @@
 use sqlx::Any;
 use libsignal_protocol_rust::{SessionStore, ProtocolAddress, SessionRecord, Context, SignalProtocolError};
 use async_trait::async_trait;
-use log::{debug, error};
+use log::{debug, error, warn};
 
 use super::PersistenceManager;
 
@@ -13,44 +13,44 @@ impl SessionStore for PersistenceManager {
         address: &ProtocolAddress,
         _ctx: Context,
     ) -> Result<Option<SessionRecord>, SignalProtocolError> {
-        eprintln!(
-            "DEBUG PERSISTENCE: Loading session for {}:{} (device: {})",
+        debug!(
+            "Loading session for {}:{} (device_id: {})",
             address.name(),
             address.device_id(),
-            self.device_jid
+            self.device_id
         );
 
-        eprintln!("DEBUG PERSISTENCE: SQL Query - SELECT session_data FROM signal_sessions WHERE device_jid = '{}' AND recipient_name = '{}' AND recipient_device_id = {}", 
-            &self.device_jid, address.name(), address.device_id());
+        debug!("SQL Query - SELECT session_data FROM signal_sessions WHERE device_id = {} AND recipient_name = '{}' AND recipient_device_id = {}", 
+            self.device_id, address.name(), address.device_id());
             
         // Debug: Check what devices exist in this database connection
-        let device_check = sqlx::query_as::<Any, (String,)>("SELECT jid FROM devices")
+        let device_check = sqlx::query_as::<Any, (i64, Option<String>)>("SELECT device_id, jid FROM devices")
             .fetch_all(self.pool()).await;
         match device_check {
             Ok(devices) => {
-                eprintln!("DEBUG PERSISTENCE: Devices in database: {:?}", devices);
+                debug!("Devices in database: {:?}", devices);
             }
             Err(e) => {
-                eprintln!("DEBUG PERSISTENCE: Error checking devices: {}", e);
+                debug!("Error checking devices: {}", e);
             }
         }
         
         // Debug: Check what sessions exist
-        let session_check = sqlx::query_as::<Any, (String, String, i32)>("SELECT device_jid, recipient_name, recipient_device_id FROM signal_sessions")
+        let session_check = sqlx::query_as::<Any, (i64, String, i32)>("SELECT device_id, recipient_name, recipient_device_id FROM signal_sessions")
             .fetch_all(self.pool()).await;
         match session_check {
             Ok(sessions) => {
-                eprintln!("DEBUG PERSISTENCE: Sessions in database: {:?}", sessions);
+                debug!("Sessions in database: {:?}", sessions);
             }
             Err(e) => {
-                eprintln!("DEBUG PERSISTENCE: Error checking sessions: {}", e);
+                debug!("Error checking sessions: {}", e);
             }
         }
         
         let session_data_result = sqlx::query_as::<Any, (Vec<u8>,)>(
-            "SELECT session_data FROM signal_sessions WHERE device_jid = ? AND recipient_name = ? AND recipient_device_id = ?"
+            "SELECT session_data FROM signal_sessions WHERE device_id = ? AND recipient_name = ? AND recipient_device_id = ?"
         )
-        .bind(&self.device_jid)
+        .bind(self.device_id)
         .bind(address.name())
         .bind(address.device_id() as i32)
         .fetch_optional(self.pool()).await;
@@ -59,21 +59,21 @@ impl SessionStore for PersistenceManager {
             Ok(Some((session_data,))) => {
                 match SessionRecord::deserialize(&session_data) {
                     Ok(session) => {
-                        eprintln!("DEBUG PERSISTENCE: Successfully loaded session for {}:{}", address.name(), address.device_id());
+                        debug!("Successfully loaded session for {}:{}", address.name(), address.device_id());
                         Ok(Some(session))
                     }
                     Err(e) => {
-                        eprintln!("DEBUG PERSISTENCE: Failed to deserialize session for {}:{}: {}", address.name(), address.device_id(), e);
+                        error!("Failed to deserialize session for {}:{}: {}", address.name(), address.device_id(), e);
                         Err(SignalProtocolError::InvalidArgument(format!("Session deserialization failed: {}", e)))
                     }
                 }
             }
             Ok(None) => {
-                eprintln!("DEBUG PERSISTENCE: No session found for {}:{}", address.name(), address.device_id());
+                debug!("No session found for {}:{}", address.name(), address.device_id());
                 Ok(None)
             }
             Err(e) => {
-                eprintln!("DEBUG PERSISTENCE: Database error loading session for {}:{}: {}", address.name(), address.device_id(), e);
+                error!("Database error loading session for {}:{}: {}", address.name(), address.device_id(), e);
                 Err(SignalProtocolError::InvalidArgument(format!("Database error: {}", e)))
             }
         }
@@ -85,21 +85,21 @@ impl SessionStore for PersistenceManager {
         record: &SessionRecord,
         _ctx: Context,
     ) -> Result<(), SignalProtocolError> {
-        eprintln!(
-            "DEBUG PERSISTENCE: Storing session for {}:{} (device: {})",
+        debug!(
+            "Storing session for {}:{} (device_id: {})",
             address.name(),
             address.device_id(),
-            self.device_jid
+            self.device_id
         );
 
         let session_data = record.serialize()
             .map_err(|e| SignalProtocolError::InvalidArgument(format!("Session serialization failed: {}", e)))?;
 
-        eprintln!("DEBUG PERSISTENCE: SQL Insert - INSERT OR REPLACE INTO signal_sessions (device_jid='{}', recipient_name='{}', recipient_device_id={}, session_data=<{} bytes>)", 
-            &self.device_jid, address.name(), address.device_id(), session_data.len());
+        debug!("SQL Insert - INSERT OR REPLACE INTO signal_sessions (device_id={}, recipient_name='{}', recipient_device_id={}, session_data=<{} bytes>)", 
+            self.device_id, address.name(), address.device_id(), session_data.len());
         
         if session_data.is_empty() {
-            eprintln!("DEBUG PERSISTENCE: WARNING - Session data is empty! This might not be suitable for persistence testing.");
+            warn!("Session data is empty! This might not be suitable for persistence testing.");
         }
         
         // Use explicit transaction to ensure immediate visibility
@@ -107,9 +107,9 @@ impl SessionStore for PersistenceManager {
             .map_err(|e| SignalProtocolError::InvalidArgument(format!("Failed to begin transaction: {}", e)))?;
             
         let store_result = sqlx::query(
-            "INSERT OR REPLACE INTO signal_sessions (device_jid, recipient_name, recipient_device_id, session_data) VALUES (?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO signal_sessions (device_id, recipient_name, recipient_device_id, session_data) VALUES (?, ?, ?, ?)"
         )
-        .bind(&self.device_jid)
+        .bind(self.device_id)
         .bind(address.name())
         .bind(address.device_id() as i32)
         .bind(&session_data)
@@ -118,20 +118,20 @@ impl SessionStore for PersistenceManager {
         
         let final_result = match store_result {
             Ok(_) => {
-                eprintln!("DEBUG PERSISTENCE: Insert successful, committing transaction");
+                debug!("Insert successful, committing transaction");
                 match transaction.commit().await {
                     Ok(_) => {
-                        eprintln!("DEBUG PERSISTENCE: Successfully committed session for {}:{}", address.name(), address.device_id());
+                        debug!("Successfully committed session for {}:{}", address.name(), address.device_id());
                         Ok(())
                     }
                     Err(e) => {
-                        eprintln!("DEBUG PERSISTENCE: Failed to commit transaction: {:?}", e);
+                        error!("Failed to commit transaction: {:?}", e);
                         Err(SignalProtocolError::InvalidArgument(format!("Failed to commit transaction: {}", e)))
                     }
                 }
             }
             Err(e) => {
-                eprintln!("DEBUG PERSISTENCE: Insert failed, rolling back: {:?}", e);
+                error!("Insert failed, rolling back: {:?}", e);
                 let _ = transaction.rollback().await;
                 Err(SignalProtocolError::InvalidArgument(format!("Insert failed: {}", e)))
             }
@@ -141,22 +141,22 @@ impl SessionStore for PersistenceManager {
             Ok(_) => {
                 // Immediately verify the session was inserted by querying it back
                 let verify_result = sqlx::query_as::<Any, (Vec<u8>,)>(
-                    "SELECT session_data FROM signal_sessions WHERE device_jid = ? AND recipient_name = ? AND recipient_device_id = ?"
+                    "SELECT session_data FROM signal_sessions WHERE device_id = ? AND recipient_name = ? AND recipient_device_id = ?"
                 )
-                .bind(&self.device_jid)
+                .bind(self.device_id)
                 .bind(address.name())
                 .bind(address.device_id() as i32)
                 .fetch_optional(self.pool()).await;
                 
                 match verify_result {
                     Ok(Some((data,))) => {
-                        eprintln!("DEBUG PERSISTENCE: VERIFICATION - Session found in database after commit, {} bytes", data.len());
+                        debug!("VERIFICATION - Session found in database after commit, {} bytes", data.len());
                     }
                     Ok(None) => {
-                        eprintln!("DEBUG PERSISTENCE: VERIFICATION - Session NOT found in database after commit!");
+                        warn!("VERIFICATION - Session NOT found in database after commit!");
                     }
                     Err(e) => {
-                        eprintln!("DEBUG PERSISTENCE: VERIFICATION - Error querying session after commit: {}", e);
+                        error!("VERIFICATION - Error querying session after commit: {}", e);
                     }
                 }
             }
@@ -171,16 +171,16 @@ impl PersistenceManager {
     /// Check if a session exists for the given address (app-level utility function)
     pub async fn contains_session(&self, address: &ProtocolAddress) -> Result<bool, SignalProtocolError> {
         debug!(
-            "Checking if session exists for {}:{} (device: {})",
+            "Checking if session exists for {}:{} (device_id: {})",
             address.name(),
             address.device_id(),
-            self.device_jid
+            self.device_id
         );
 
         let exists_result = sqlx::query_as::<Any, (i32,)>(
-            "SELECT 1 FROM signal_sessions WHERE device_jid = ? AND recipient_name = ? AND recipient_device_id = ? LIMIT 1"
+            "SELECT 1 FROM signal_sessions WHERE device_id = ? AND recipient_name = ? AND recipient_device_id = ? LIMIT 1"
         )
-        .bind(&self.device_jid)
+        .bind(self.device_id)
         .bind(address.name())
         .bind(address.device_id() as i32)
         .fetch_optional(self.pool()).await;
@@ -197,17 +197,17 @@ impl PersistenceManager {
     /// Delete a specific session (app-level utility function)
     pub async fn delete_session(&self, recipient_name: &str, recipient_device_id: i32) -> Result<bool, SignalProtocolError> {
         debug!(
-            "Deleting session for {}:{} (device: {})",
+            "Deleting session for {}:{} (device_id: {})",
             recipient_name,
             recipient_device_id,
-            self.device_jid
+            self.device_id
         );
 
         // Use execute() to get proper row count information
         let delete_result = sqlx::query(
-            "DELETE FROM signal_sessions WHERE device_jid = ? AND recipient_name = ? AND recipient_device_id = ?"
+            "DELETE FROM signal_sessions WHERE device_id = ? AND recipient_name = ? AND recipient_device_id = ?"
         )
-        .bind(&self.device_jid)
+        .bind(self.device_id)
         .bind(recipient_name)
         .bind(recipient_device_id)
         .execute(self.pool())
@@ -233,17 +233,17 @@ impl PersistenceManager {
     /// Delete all sessions for a user prefix (app-level utility function)
     pub async fn delete_all_sessions_for_user(&self, user_prefix: &str) -> Result<i32, SignalProtocolError> {
         debug!(
-            "Deleting all sessions for user prefix '{}' (device: {})",
+            "Deleting all sessions for user prefix '{}' (device_id: {})",
             user_prefix,
-            self.device_jid
+            self.device_id
         );
 
         let pattern = format!("{}%", user_prefix);
         // Use execute() to get proper row count information
         let delete_result = sqlx::query(
-            "DELETE FROM signal_sessions WHERE device_jid = ? AND recipient_name LIKE ?"
+            "DELETE FROM signal_sessions WHERE device_id = ? AND recipient_name LIKE ?"
         )
-        .bind(&self.device_jid)
+        .bind(self.device_id)
         .bind(pattern)
         .execute(self.pool())
         .await;
@@ -265,40 +265,36 @@ impl PersistenceManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+
+    fn get_temp_db_path(test_name: &str) -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::fs::File;
+        let temp_dir = env::temp_dir();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let db_path = temp_dir.join(format!("test_{}_{}.db", test_name, timestamp));
+        
+        // Create the file to ensure it exists
+        File::create(&db_path).expect("Failed to create temp database file");
+        
+        format!("sqlite:{}", db_path.to_string_lossy())
+    }
 
     #[tokio::test]
     async fn test_session_store_basic_operations() {
         println!("🔧 Creating persistence manager...");
-        let mut manager = PersistenceManager::new("sqlite://tmp/test_session_store.db", "test_device".to_string())
+        let db_path = get_temp_db_path("session_store");
+        let mut manager = PersistenceManager::new_device(&db_path, 123, &[1, 2, 3])
             .await
             .expect("Failed to create persistence manager");
         println!("✅ Persistence manager created");
 
-        // Create table manually for test
-        println!("🔧 Creating table...");
-        let create_result = sqlx::query(
-            r#"
-            CREATE TABLE signal_sessions (
-                device_jid VARCHAR(255) NOT NULL,
-                recipient_name VARCHAR(255) NOT NULL,
-                recipient_device_id INTEGER NOT NULL,
-                session_data BLOB NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (device_jid, recipient_name, recipient_device_id)
-            )
-            "#
-        )
-        .execute(manager.pool())
-        .await;
-        
-        match create_result {
-            Ok(_) => println!("✅ Table created successfully"),
-            Err(e) => {
-                println!("❌ Failed to create table: {:?}", e);
-                panic!("Table creation failed");
-            }
-        }
+        // Run migrations to create proper schema
+        println!("🔧 Running migrations...");
+        manager.migrate().await.expect("Failed to run migrations");
+        println!("✅ Migrations completed");
+
+        // Migrations have already created the tables
 
         let address_libsignal = libsignal_protocol_rust::ProtocolAddress::new("test_user".to_string(), 1);
 

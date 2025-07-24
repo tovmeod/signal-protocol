@@ -31,9 +31,16 @@ async def test_mark_pre_key_uploaded_with_persistence(temp_db_path):
     # Verify in the database directly
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id_result = cursor.fetchone()
+    assert device_id_result is not None, "Device should exist in database"
+    device_id = device_id_result[0]
+    
+    # Then check the pre-key using device_id
     cursor.execute(
-        "SELECT uploaded FROM signal_pre_keys WHERE device_jid = ? AND key_id = ?",
-        ("test@example.com", 456)
+        "SELECT uploaded FROM signal_pre_keys WHERE device_id = ? AND key_id = ?",
+        (device_id, 456)
     )
     result = cursor.fetchone()
     conn.close()
@@ -94,9 +101,13 @@ async def test_mark_pre_key_uploaded_multiple_calls(temp_db_path):
     # Verify it's still marked as uploaded
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     cursor.execute(
-        "SELECT uploaded FROM signal_pre_keys WHERE device_jid = ? AND key_id = ?",
-        ("test@example.com", 789)
+        "SELECT uploaded FROM signal_pre_keys WHERE device_id = ? AND key_id = ?",
+        (device_id, 789)
     )
     result = cursor.fetchone()
     conn.close()
@@ -123,9 +134,13 @@ async def test_mark_pre_key_uploaded_workflow(temp_db_path):
     # Verify it starts as not uploaded (FALSE/0)
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("workflow@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     cursor.execute(
-        "SELECT uploaded FROM signal_pre_keys WHERE device_jid = ? AND key_id = ?",
-        ("workflow@example.com", 100)
+        "SELECT uploaded FROM signal_pre_keys WHERE device_id = ? AND key_id = ?",
+        (device_id, 100)
     )
     result = cursor.fetchone()
     assert result is not None, "Pre-key should exist in database"
@@ -137,8 +152,8 @@ async def test_mark_pre_key_uploaded_workflow(temp_db_path):
     
     # Verify it's now uploaded (TRUE/1)
     cursor.execute(
-        "SELECT uploaded FROM signal_pre_keys WHERE device_jid = ? AND key_id = ?",
-        ("workflow@example.com", 100)
+        "SELECT uploaded FROM signal_pre_keys WHERE device_id = ? AND key_id = ?",
+        (device_id, 100)
     )
     result = cursor.fetchone()
     conn.close()
@@ -168,9 +183,13 @@ async def test_mark_pre_key_uploaded_multiple_keys_same_device(temp_db_path):
     # Verify all pre-keys exist in database
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("alice@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     cursor.execute(
-        "SELECT key_id FROM signal_pre_keys WHERE device_jid = ? ORDER BY key_id",
-        ("alice@example.com",)
+        "SELECT key_id FROM signal_pre_keys WHERE device_id = ? ORDER BY key_id",
+        (device_id,)
     )
     existing_keys = [row[0] for row in cursor.fetchall()]
     conn.close()
@@ -205,8 +224,8 @@ async def test_mark_pre_key_uploaded_multiple_keys_same_device(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT key_id FROM signal_pre_keys WHERE device_jid = ? ORDER BY key_id",
-        ("alice@example.com",)
+        "SELECT key_id FROM signal_pre_keys WHERE device_id = ? ORDER BY key_id",
+        (device_id,)
     )
     final_keys = [row[0] for row in cursor.fetchall()]
     conn.close()

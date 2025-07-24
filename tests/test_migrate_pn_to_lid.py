@@ -58,23 +58,27 @@ async def test_migrate_pn_to_lid_sessions_only(temp_db_path):
     cursor = conn.cursor()
     
     # Check that LID sessions exist
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     cursor.execute(
-        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_jid = ? AND recipient_name = ? ORDER BY recipient_device_id",
-        ("test@example.com", "lid:abc123def456")
+        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_id = ? AND recipient_name = ? ORDER BY recipient_device_id",
+        (device_id, "lid:abc123def456")
     )
     lid_sessions = cursor.fetchall()
     
     # Check that phone number sessions are gone
     cursor.execute(
-        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", "1234567890")
+        "SELECT recipient_name, recipient_device_id FROM signal_sessions WHERE device_id = ? AND recipient_name = ?",
+        (device_id, "1234567890")
     )
     pn_sessions_remaining = cursor.fetchall()
     
     # Check other sessions are unaffected
     cursor.execute(
-        "SELECT recipient_name FROM signal_sessions WHERE device_jid = ? AND recipient_name NOT IN (?, ?)",
-        ("test@example.com", "1234567890", "lid:abc123def456")
+        "SELECT recipient_name FROM signal_sessions WHERE device_id = ? AND recipient_name NOT IN (?, ?)",
+        (device_id, "1234567890", "lid:abc123def456")
     )
     other_sessions_remaining = cursor.fetchall()
     
@@ -133,24 +137,28 @@ async def test_migrate_pn_to_lid_with_identity_keys(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     # Check LID identity keys exist
     cursor.execute(
-        "SELECT recipient_name, recipient_device_id FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ? ORDER BY recipient_device_id",
-        ("test@example.com", "lid:abc123def456")
+        "SELECT recipient_name, recipient_device_id FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ? ORDER BY recipient_device_id",
+        (device_id, "lid:abc123def456")
     )
     lid_identities = cursor.fetchall()
     
     # Check phone number identity keys are gone
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", "1234567890")
+        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ?",
+        (device_id, "1234567890")
     )
     pn_identities_count = cursor.fetchone()[0]
     
     # Check other identity keys remain
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", "0987654321")
+        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ?",
+        (device_id, "0987654321")
     )
     other_identities_count = cursor.fetchone()[0]
     
@@ -183,22 +191,26 @@ async def test_migrate_pn_to_lid_with_sender_keys(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     # Insert sender keys with phone number as group_id (group membership)
     cursor.execute(
-        "INSERT INTO signal_sender_keys (device_jid, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
-        ("test@example.com", phone_number, "other_user", 1, sender_key_data)
+        "INSERT INTO signal_sender_keys (device_id, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
+        (device_id, phone_number, "other_user", 1, sender_key_data)
     )
     
     # Insert sender keys with phone number as sender_name (keys from this user in groups)
     cursor.execute(
-        "INSERT INTO signal_sender_keys (device_jid, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
-        ("test@example.com", "group123", phone_number, 1, sender_key_data)
+        "INSERT INTO signal_sender_keys (device_id, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
+        (device_id, "group123", phone_number, 1, sender_key_data)
     )
     
     # Insert sender keys that should not be affected
     cursor.execute(
-        "INSERT INTO signal_sender_keys (device_jid, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
-        ("test@example.com", "other_group", "other_sender", 1, sender_key_data)
+        "INSERT INTO signal_sender_keys (device_id, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
+        (device_id, "other_group", "other_sender", 1, sender_key_data)
     )
     
     conn.commit()
@@ -220,24 +232,28 @@ async def test_migrate_pn_to_lid_with_sender_keys(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     # Check LID sender keys exist (both group_id and sender_name should be migrated)
     cursor.execute(
-        "SELECT group_id, sender_name FROM signal_sender_keys WHERE device_jid = ? AND (group_id = ? OR sender_name = ?)",
-        ("test@example.com", lid, lid)
+        "SELECT group_id, sender_name FROM signal_sender_keys WHERE device_id = ? AND (group_id = ? OR sender_name = ?)",
+        (device_id, lid, lid)
     )
     lid_sender_keys = cursor.fetchall()
     
     # Check phone number sender keys are gone
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_sender_keys WHERE device_jid = ? AND (group_id = ? OR sender_name = ?)",
-        ("test@example.com", phone_number, phone_number)
+        "SELECT COUNT(*) FROM signal_sender_keys WHERE device_id = ? AND (group_id = ? OR sender_name = ?)",
+        (device_id, phone_number, phone_number)
     )
     pn_sender_keys_count = cursor.fetchone()[0]
     
     # Check other sender keys remain
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_sender_keys WHERE device_jid = ? AND group_id = ? AND sender_name = ?",
-        ("test@example.com", "other_group", "other_sender")
+        "SELECT COUNT(*) FROM signal_sender_keys WHERE device_id = ? AND group_id = ? AND sender_name = ?",
+        (device_id, "other_group", "other_sender")
     )
     other_sender_keys_count = cursor.fetchone()[0]
     
@@ -282,13 +298,17 @@ async def test_migrate_pn_to_lid_comprehensive(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     cursor.execute(
-        "INSERT INTO signal_sender_keys (device_jid, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
-        ("test@example.com", phone_number, "other_user", 1, sender_key_data)
+        "INSERT INTO signal_sender_keys (device_id, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
+        (device_id, phone_number, "other_user", 1, sender_key_data)
     )
     cursor.execute(
-        "INSERT INTO signal_sender_keys (device_jid, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
-        ("test@example.com", "group456", phone_number, 1, sender_key_data)
+        "INSERT INTO signal_sender_keys (device_id, group_id, sender_name, sender_device_id, sender_key) VALUES (?, ?, ?, ?, ?)",
+        (device_id, "group456", phone_number, 1, sender_key_data)
     )
     
     conn.commit()
@@ -312,41 +332,45 @@ async def test_migrate_pn_to_lid_comprehensive(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     # Check all data migrated to LID
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_sessions WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", lid)
+        "SELECT COUNT(*) FROM signal_sessions WHERE device_id = ? AND recipient_name = ?",
+        (device_id, lid)
     )
     lid_sessions_count = cursor.fetchone()[0]
     
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", lid)
+        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ?",
+        (device_id, lid)
     )
     lid_identities_count = cursor.fetchone()[0]
     
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_sender_keys WHERE device_jid = ? AND (group_id = ? OR sender_name = ?)",
-        ("test@example.com", lid, lid)
+        "SELECT COUNT(*) FROM signal_sender_keys WHERE device_id = ? AND (group_id = ? OR sender_name = ?)",
+        (device_id, lid, lid)
     )
     lid_sender_keys_count = cursor.fetchone()[0]
     
     # Check all phone number data deleted
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_sessions WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", phone_number)
+        "SELECT COUNT(*) FROM signal_sessions WHERE device_id = ? AND recipient_name = ?",
+        (device_id, phone_number)
     )
     pn_sessions_count = cursor.fetchone()[0]
     
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", phone_number)
+        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ?",
+        (device_id, phone_number)
     )
     pn_identities_count = cursor.fetchone()[0]
     
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_sender_keys WHERE device_jid = ? AND (group_id = ? OR sender_name = ?)",
-        ("test@example.com", phone_number, phone_number)
+        "SELECT COUNT(*) FROM signal_sender_keys WHERE device_id = ? AND (group_id = ? OR sender_name = ?)",
+        (device_id, phone_number, phone_number)
     )
     pn_sender_keys_count = cursor.fetchone()[0]
     
@@ -403,29 +427,33 @@ async def test_migrate_pn_to_lid_conflict_handling(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     # Phone number data should be deleted regardless of conflicts
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_sessions WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", phone_number)
+        "SELECT COUNT(*) FROM signal_sessions WHERE device_id = ? AND recipient_name = ?",
+        (device_id, phone_number)
     )
     pn_sessions_count = cursor.fetchone()[0]
     
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", phone_number)
+        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ?",
+        (device_id, phone_number)
     )
     pn_identities_count = cursor.fetchone()[0]
     
     # LID data should still exist (original LID data preserved)
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_sessions WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", lid)
+        "SELECT COUNT(*) FROM signal_sessions WHERE device_id = ? AND recipient_name = ?",
+        (device_id, lid)
     )
     lid_sessions_count = cursor.fetchone()[0]
     
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", lid)
+        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ?",
+        (device_id, lid)
     )
     lid_identities_count = cursor.fetchone()[0]
     
@@ -516,15 +544,19 @@ async def test_migrate_pn_to_lid_transaction_rollback_simulation(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_sessions WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", phone_number)
+        "SELECT COUNT(*) FROM signal_sessions WHERE device_id = ? AND recipient_name = ?",
+        (device_id, phone_number)
     )
     pn_sessions_remaining = cursor.fetchone()[0]
     
     cursor.execute(
-        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ?",
-        ("test@example.com", phone_number)
+        "SELECT COUNT(*) FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ?",
+        (device_id, phone_number)
     )
     pn_identities_remaining = cursor.fetchone()[0]
     
@@ -579,17 +611,21 @@ async def test_migrate_pn_to_lid_concurrent_operations(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # First get the device_id for the JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("concurrent@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     for phone in phone_numbers:
         cursor.execute(
-            "SELECT COUNT(*) FROM signal_sessions WHERE device_jid = ? AND recipient_name = ?",
-            ("concurrent@example.com", phone)
+            "SELECT COUNT(*) FROM signal_sessions WHERE device_id = ? AND recipient_name = ?",
+            (device_id, phone)
         )
         pn_sessions = cursor.fetchone()[0]
         assert pn_sessions == 0, f"Phone {phone} sessions should be deleted"
         
         cursor.execute(
-            "SELECT COUNT(*) FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ?",
-            ("concurrent@example.com", phone)
+            "SELECT COUNT(*) FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ?",
+            (device_id, phone)
         )
         pn_identities = cursor.fetchone()[0]
         assert pn_identities == 0, f"Phone {phone} identity keys should be deleted"

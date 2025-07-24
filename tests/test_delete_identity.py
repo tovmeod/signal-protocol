@@ -20,9 +20,18 @@ def get_saved_addresses_from_db(temp_db_path, device_jid):
     """Helper to get saved addresses in 'recipient_name:device_id' format from database."""
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
+    # First get the device_id for the given JID
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", (device_jid,))
+    result = cursor.fetchone()
+    if result is None:
+        conn.close()
+        raise ValueError(f"No device found for JID: {device_jid}")
+    device_id = result[0]
+    
+    # Now get the identity keys for this device
     cursor.execute(
-        "SELECT recipient_name, recipient_device_id FROM signal_identity_keys WHERE device_jid = ? ORDER BY recipient_name",
-        (device_jid,)
+        "SELECT recipient_name, recipient_device_id FROM signal_identity_keys WHERE device_id = ? ORDER BY recipient_name",
+        (device_id,)
     )
     db_records = cursor.fetchall()
     conn.close()
@@ -69,10 +78,14 @@ async def test_delete_identity_basic(temp_db_path):
     conn = sqlite3.connect(temp_db_path)
     cursor = conn.cursor()
     
+    # Get device_id first
+    cursor.execute("SELECT device_id FROM devices WHERE jid = ?", ("test@example.com",))
+    device_id = cursor.fetchone()[0]
+    
     # Test the manual query that our implementation uses
     cursor.execute(
-        "DELETE FROM signal_identity_keys WHERE device_jid = ? AND recipient_name = ? AND recipient_device_id = ?",
-        ("test@example.com", "1234567890", 1)
+        "DELETE FROM signal_identity_keys WHERE device_id = ? AND recipient_name = ? AND recipient_device_id = ?",
+        (device_id, "1234567890", 1)
     )
     manual_deleted = cursor.rowcount
     conn.commit()

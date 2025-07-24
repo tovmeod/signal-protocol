@@ -34,7 +34,7 @@ jobs:
 
     - name: Run Rust test compilation
       run: |
-        cargo test --no-run
+        cargo test
 
     - name: Install wheel linux
       if: runner.os != 'Windows'
