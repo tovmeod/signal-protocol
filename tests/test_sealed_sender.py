@@ -1,6 +1,7 @@
 import pytest
 
 from signal_protocol import address, curve, error, identity_key, sealed_sender, session, storage
+from signal_protocol.storage import InMemSignalProtocolStore
 
 from tests.utils.sessions import create_pre_key_bundle
 
@@ -114,14 +115,14 @@ def test_sealed_sender_happy():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     alice_pubkey = alice_identity_key_pair.public_key()
 
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
     bob_uuid_address = address.ProtocolAddress(bob_uuid, bob_device_id)
 
     bob_pre_key_bundle = create_pre_key_bundle(bob_store)
@@ -181,14 +182,14 @@ def test_sealed_sender_expired_cert():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     alice_pubkey = alice_identity_key_pair.public_key()
 
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
     bob_uuid_address = address.ProtocolAddress(bob_uuid, bob_device_id)
 
     bob_pre_key_bundle = create_pre_key_bundle(bob_store)
@@ -244,14 +245,14 @@ def test_sealed_sender_invalid_trust_root():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     alice_pubkey = alice_identity_key_pair.public_key()
 
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
     bob_uuid_address = address.ProtocolAddress(bob_uuid, bob_device_id)
 
     bob_pre_key_bundle = create_pre_key_bundle(bob_store)

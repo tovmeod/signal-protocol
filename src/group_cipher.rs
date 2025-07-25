@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
-use futures::executor::block_on;
+use crate::runtime;
 use rand::rngs::OsRng;
 
 use crate::error::{Result, SignalProtocolError};
@@ -17,8 +17,10 @@ pub fn group_encrypt(
     plaintext: &[u8],
 ) -> Result<PyObject> {
     let mut csprng = OsRng;
-    let ciphertext = block_on(libsignal_protocol_rust::group_encrypt(
-        &mut protocol_store.store.sender_key_store,
+    let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
+    let sender_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SenderKeyStore;
+    let ciphertext = runtime::block_on(libsignal_protocol_rust::group_encrypt(
+        sender_key_store,
         &sender_key_id.state,
         plaintext,
         &mut csprng,
@@ -34,9 +36,11 @@ pub fn group_decrypt(
     protocol_store: &mut InMemSignalProtocolStore,
     sender_key_id: &SenderKeyName,
 ) -> Result<PyObject> {
-    let plaintext = block_on(libsignal_protocol_rust::group_decrypt(
+    let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
+    let sender_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SenderKeyStore;
+    let plaintext = runtime::block_on(libsignal_protocol_rust::group_decrypt(
         skm_bytes,
-        &mut protocol_store.store.sender_key_store,
+        sender_key_store,
         &sender_key_id.state,
         None,
     ))?;
@@ -49,11 +53,13 @@ pub fn process_sender_key_distribution_message(
     skdm: &SenderKeyDistributionMessage,
     protocol_store: &mut InMemSignalProtocolStore,
 ) -> Result<()> {
-    Ok(block_on(
+    let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
+    let sender_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SenderKeyStore;
+    Ok(runtime::block_on(
         libsignal_protocol_rust::process_sender_key_distribution_message(
             &sender_key_name.state,
             &skdm.data,
-            &mut protocol_store.store.sender_key_store,
+            sender_key_store,
             None,
         ),
     )?)
@@ -65,10 +71,12 @@ pub fn create_sender_key_distribution_message(
     protocol_store: &mut InMemSignalProtocolStore,
 ) -> PyResult<Py<SenderKeyDistributionMessage>> {
     let mut csprng = OsRng;
-    let upstream_data = match block_on(
+    let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
+    let sender_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SenderKeyStore;
+    let upstream_data = match runtime::block_on(
         libsignal_protocol_rust::create_sender_key_distribution_message(
             &sender_key_name.state,
-            &mut protocol_store.store.sender_key_store,
+            sender_key_store,
             &mut csprng,
             None,
         ),

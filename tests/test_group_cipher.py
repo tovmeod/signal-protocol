@@ -2,6 +2,7 @@ import pytest
 import random
 
 from signal_protocol import address, error, group_cipher, identity_key, sender_keys, storage, protocol
+from signal_protocol.storage import InMemSignalProtocolStore
 
 
 DEVICE_ID = 1
@@ -13,7 +14,7 @@ def test_group_no_send_session():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
 
@@ -27,12 +28,12 @@ def test_group_basic_encrypt_decrypt():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -58,12 +59,12 @@ def test_group_no_recv_session():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -84,12 +85,12 @@ def test_group_large_message():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -116,12 +117,12 @@ def test_group_basic_ratchet():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -163,12 +164,12 @@ def test_group_late_join():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -198,12 +199,12 @@ def test_group_out_of_order():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -237,12 +238,12 @@ def test_group_too_far_in_the_future():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store
@@ -273,12 +274,12 @@ def test_group_message_key_limit():
 
     alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
     alice_registration_id = 1
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
     bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
     bob_registration_id = 2
-    bob_store = storage.InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
+    bob_store = InMemSignalProtocolStore(bob_identity_key_pair, bob_registration_id)
 
     sent_distribution_message = group_cipher.create_sender_key_distribution_message(
         group_sender, alice_store

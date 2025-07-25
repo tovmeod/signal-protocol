@@ -1,4 +1,5 @@
 from signal_protocol import curve, address, identity_key, state, storage
+from signal_protocol.storage import InMemSignalProtocolStore
 
 DEVICE_ID = 1
 
@@ -13,10 +14,10 @@ def test_define_prekey_bundle_under_prekey_exhaustion():
     alice_registration_id = 1  # TODO: generate these
     bob_registration_id = 2
 
-    alice_store = storage.InMemSignalProtocolStore(
+    alice_store = InMemSignalProtocolStore(
         alice_identity_key_pair, alice_registration_id
     )
-    bob_store = storage.InMemSignalProtocolStore(
+    bob_store = InMemSignalProtocolStore(
         bob_identity_key_pair, bob_registration_id
     )
 

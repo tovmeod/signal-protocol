@@ -119,6 +119,98 @@ protocol store), you can encrypt messages:
 ciphertext = session_cipher.message_encrypt(store, recipient_address, b"hello")
 ```
 
+### Persistent Storage
+
+The library supports persistent storage through a built-in cache + backing store architecture. This provides fast in-memory caching with database persistence, enabling sessions, keys, and other protocol state to persist across application restarts.
+
+#### Basic Usage (In-Memory Only)
+
+For simple use cases or testing, you can use the store without persistence:
+
+```py
+# In-memory only (no persistence)
+store = storage.InMemSignalProtocolStore(identity_key_pair, registration_id)
+```
+
+#### Using Database Persistence
+
+To enable persistence, provide a database connection string and device identifier:
+
+```py
+# With SQLite persistence
+store = storage.InMemSignalProtocolStore(
+    identity_key_pair, 
+    registration_id,
+    connection_string="sqlite://signal.db",
+    device_jid="alice@example.com"
+)
+
+# Set up database tables (only needed once)
+await store.migrate()
+
+# Use the store normally - all operations are automatically cached and persisted
+session.process_prekey_bundle(recipient_address, store, recipient_bundle)
+ciphertext = session_cipher.message_encrypt(store, recipient_address, b"hello")
+
+# Clean up resources when done
+store.close()
+```
+
+#### Supported Databases
+
+The library supports multiple database backends via connection strings:
+
+```py
+# SQLite (file-based)
+store = storage.InMemSignalProtocolStore(
+    identity_key_pair, registration_id,
+    connection_string="sqlite://signal.db",
+    device_jid="alice@example.com"
+)
+
+# SQLite (in-memory - for testing)
+store = storage.InMemSignalProtocolStore(
+    identity_key_pair, registration_id,
+    connection_string="sqlite://:memory:",
+    device_jid="alice@example.com"
+)
+
+# PostgreSQL
+store = storage.InMemSignalProtocolStore(
+    identity_key_pair, registration_id,
+    connection_string="postgresql://user:password@localhost/signal_db",
+    device_jid="alice@example.com"
+)
+```
+
+#### Session Management
+
+The persistent store provides additional methods for managing sessions:
+
+```py
+# Check if a session exists (faster than loading the full session)
+has_session = store.contains_session(recipient_address)
+
+# Delete a specific session
+deleted = store.delete_session("bob", 1)  # Returns True if session existed
+
+# Delete all sessions for a user
+count = store.delete_all_sessions_for_user("bob")  # Returns number deleted
+
+# Access device information (when persistence is enabled)
+device_id = store.device_jid()
+```
+
+#### Key Features
+
+- **Cache + Backing Store**: Fast in-memory cache with database persistence
+- **Write-Through**: All writes go to both cache and database
+- **Read Optimization**: Reads check cache first, fall back to database
+- **Multiple Databases**: Supports SQLite and PostgreSQL
+- **Automatic Setup**: Database schema is created automatically via migrations
+- **Resource Management**: Proper cleanup of database connections via `close()`
+- **Error Resilience**: Database errors don't break the protocol - operations fall back to cache-only mode
+
 ## Developer Getting Started
 
 You will need both [Rust](https://rustup.rs/) and Python 3.7+ installed on your system.

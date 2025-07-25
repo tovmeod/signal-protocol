@@ -22,7 +22,12 @@ from signal_protocol import (
 DEVICE_ID = 1
 
 
-def test_basic_prekey_v3_persistent(alice_store, bob_store):
+@pytest.mark.asyncio
+async def test_basic_prekey_v3_persistent(alice_store_with_persistence, bob_store_with_persistence):
+    # New cache+backing store architecture - stores have integrated persistence
+    alice_store = alice_store_with_persistence
+    bob_store = bob_store_with_persistence
+    
     alice_address = address.ProtocolAddress("+14151111111", DEVICE_ID)
     bob_address = address.ProtocolAddress("+14151111112", DEVICE_ID)
 
@@ -59,7 +64,9 @@ def test_basic_prekey_v3_persistent(alice_store, bob_store):
         bob_signed_pre_key_signature,
     )
 
-    assert alice_store.load_session(bob_address) is None
+    # Check that no session exists initially
+    result = alice_store.load_session(bob_address)
+    assert result is None
 
     # Process the pre-key bundle
     session.process_prekey_bundle(
@@ -101,7 +108,9 @@ def test_basic_prekey_v3_persistent(alice_store, bob_store):
     except Exception as e:
         print(f"Error retrieving signed pre-key with ID {signed_pre_key_id}: {e}")
 
-    assert bob_store.load_session(alice_address) is None
+    # Check that no session exists for alice_address in bob's storage
+    result = bob_store.load_session(alice_address)
+    assert result is None
 
     # Decrypt the message
     plaintext = session_cipher.message_decrypt(
@@ -127,7 +136,8 @@ def test_basic_prekey_v3_persistent(alice_store, bob_store):
     assert alice_decrypts == bobs_response
 
 
-def test_basic_simultaneous_initiate_persistent(alice_store, bob_store):
+@pytest.mark.asyncio
+async def test_basic_simultaneous_initiate_persistent(alice_store, bob_store):
     alice_address = address.ProtocolAddress("+14151111111", 1)
     bob_address = address.ProtocolAddress("+14151111112", 1)
 
@@ -256,3 +266,53 @@ def test_basic_simultaneous_initiate_persistent(alice_store, bob_store):
         protocol.SignalMessage.try_from(bob_response.serialize()),
     )
     assert response_plaintext == b"you as well"
+
+
+@pytest.mark.asyncio
+async def test_minimal_async_storage(alice_store_with_persistence):
+    """Minimal test to check async storage is working"""
+    from signal_protocol import identity_key, address
+    
+    # New cache+backing store architecture - store has integrated persistence
+    alice_store = alice_store_with_persistence
+    
+    # Create address
+    bob_address = address.ProtocolAddress("bob", 2)
+    
+    # Test simple calls on store directly (now has integrated persistence)
+    print("Testing save_identity...")
+    result = alice_store.save_identity(bob_address, alice_store.get_identity_key_pair().identity_key())
+    print(f"save_identity result: {result}")
+    
+    print("Testing get_identity...")
+    result = alice_store.get_identity(bob_address)
+    print(f"get_identity result: {result}")
+    
+    print("Testing load_session...")
+    result = alice_store.load_session(bob_address)
+    print(f"load_session result: {result}")
+    
+    print("Async storage test completed successfully!")
+
+
+# NOTE: This test disabled - AsyncPersistentStorage removed in cache+backing store architecture
+# The old Python persistence system has been replaced with native Rust database persistence
+# @pytest.mark.asyncio 
+# async def test_direct_async_call():
+#     """Test calling async storage method directly without going through Signal Protocol"""
+#     from tests.conftest import AsyncPersistentStorage
+#     from signal_protocol import address, identity_key
+#     
+#     # Create async storage
+#     storage = AsyncPersistentStorage()
+#     
+#     # Create test data
+#     addr = address.ProtocolAddress("test", 1)
+#     identity = identity_key.IdentityKeyPair.generate().identity_key()
+#     
+#     # Call the async method directly 
+#     print("Calling async save_identity directly...")
+#     result = await storage.save_identity(addr, identity)
+#     print(f"Direct async call result: {result}")
+#     
+#     print("Direct async test completed!")

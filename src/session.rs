@@ -2,7 +2,7 @@
 
 use pyo3::prelude::*;
 
-use futures::executor::block_on;
+use crate::runtime;
 use rand::rngs::OsRng;
 
 use crate::address::ProtocolAddress;
@@ -18,13 +18,18 @@ pub fn process_prekey(
     session_record: &mut SessionRecord,
     protocol_store: &mut InMemSignalProtocolStore,
 ) -> Result<Option<PreKeyId>> {
-    let result = block_on(libsignal_protocol_rust::process_prekey(
+    let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
+    let identity_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::IdentityKeyStore;
+    let pre_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::PreKeyStore;
+    let signed_pre_key_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SignedPreKeyStore;
+
+    let result = runtime::block_on(libsignal_protocol_rust::process_prekey(
         &message.data,
         &remote_address.state,
         &mut session_record.state,
-        &mut protocol_store.store.identity_store,
-        &mut protocol_store.store.pre_key_store,
-        &mut protocol_store.store.signed_pre_key_store,
+        identity_store,
+        pre_key_store,
+        signed_pre_key_store,
         None,
     ))?;
     Ok(result)
@@ -37,10 +42,14 @@ pub fn process_prekey_bundle(
     bundle: PreKeyBundle,
 ) -> Result<()> {
     let mut csprng = OsRng;
-    block_on(libsignal_protocol_rust::process_prekey_bundle(
+    let store_ptr = protocol_store as *mut InMemSignalProtocolStore;
+    let session_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::SessionStore;
+    let identity_store = unsafe { &mut *store_ptr } as &mut dyn libsignal_protocol_rust::IdentityKeyStore;
+
+    runtime::block_on(libsignal_protocol_rust::process_prekey_bundle(
         &remote_address.state,
-        &mut protocol_store.store.session_store,
-        &mut protocol_store.store.identity_store,
+        session_store,
+        identity_store,
         &bundle.state,
         &mut csprng,
         None,

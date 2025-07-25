@@ -1,549 +1,1101 @@
-use futures::executor::block_on;
 use pyo3::prelude::*;
+use std::sync::RwLock;
 
-use crate::address::ProtocolAddress;
-use crate::error::{Result, SignalProtocolError};
-use crate::identity_key::{IdentityKey, IdentityKeyPair};
-use crate::sender_keys::{SenderKeyName, SenderKeyRecord};
-use crate::state::{PreKeyId, PreKeyRecord, SessionRecord, SignedPreKeyId, SignedPreKeyRecord};
+// Remove unused imports
+use crate::persistence::PersistenceManager;
 
-// traits
-use libsignal_protocol_rust::{
-    IdentityKeyStore, PreKeyStore, SenderKeyStore, SessionStore, SignedPreKeyStore,
-};
-
-/// Base class for persistent storage that users can inherit from in Python
-#[pyclass(subclass)]
-pub struct PersistentStorageBase {
-}
-
-#[pymethods]
-impl PersistentStorageBase {
-    #[new]
-    fn new() -> Self {
-        Self {}
-    }
-
-    // Identity Store Methods
-    fn get_identity_key_pair(&self) -> PyResult<IdentityKeyPair> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "get_identity_key_pair must be implemented by subclass"
-        ))
-    }
-
-    fn get_local_registration_id(&self) -> PyResult<u32> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "get_local_registration_id must be implemented by subclass"
-        ))
-    }
-
-    fn save_identity(&self, _address_name: String, _identity_key: &IdentityKey) -> PyResult<bool> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "save_identity must be implemented by subclass"
-        ))
-    }
-
-    fn get_identity(&self, _address_name: String) -> PyResult<Option<IdentityKey>> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "get_identity must be implemented by subclass"
-        ))
-    }
-
-    // Session Store Methods
-    fn store_session(&self, _address_name: String, _session_record: &SessionRecord) -> PyResult<()> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "store_session must be implemented by subclass"
-        ))
-    }
-
-    fn load_session(&self, _address_name: String) -> PyResult<Option<SessionRecord>> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "load_session must be implemented by subclass"
-        ))
-    }
-
-    // PreKey Store Methods
-    fn get_pre_key(&self, _pre_key_id: PreKeyId) -> PyResult<PreKeyRecord> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "get_pre_key must be implemented by subclass"
-        ))
-    }
-
-    fn save_pre_key(&self, _pre_key_id: PreKeyId, _pre_key_record: &PreKeyRecord) -> PyResult<()> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "save_pre_key must be implemented by subclass"
-        ))
-    }
-
-    fn remove_pre_key(&self, _pre_key_id: PreKeyId) -> PyResult<()> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "remove_pre_key must be implemented by subclass"
-        ))
-    }
-
-    // Signed PreKey Store Methods
-    fn get_signed_pre_key(&self, _signed_pre_key_id: SignedPreKeyId) -> PyResult<SignedPreKeyRecord> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "get_signed_pre_key must be implemented by subclass"
-        ))
-    }
-
-    fn save_signed_pre_key(&self, _signed_pre_key_id: SignedPreKeyId, _signed_pre_key_record: &SignedPreKeyRecord) -> PyResult<()> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "save_signed_pre_key must be implemented by subclass"
-        ))
-    }
-
-    // Sender Key Store Methods
-    fn store_sender_key(&self, _sender_key_name: String, _sender_key_record: &SenderKeyRecord) -> PyResult<()> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "store_sender_key must be implemented by subclass"
-        ))
-    }
-
-    fn load_sender_key(&self, _sender_key_name: String) -> PyResult<Option<SenderKeyRecord>> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "load_sender_key must be implemented by subclass"
-        ))
-    }
-}
-
-// Custom Clone implementation for InMemSignalProtocolStore
-#[pyclass]
+#[pyclass(name = "InMemSignalProtocolStore")]
 pub struct InMemSignalProtocolStore {
-    pub store: libsignal_protocol_rust::InMemSignalProtocolStore,
-    py_storage: Option<Py<PersistentStorageBase>>,
+    pub store: RwLock<libsignal_protocol_rust::InMemSignalProtocolStore>,
+    persistence_manager: Option<PersistenceManager>,
 }
 
 impl Clone for InMemSignalProtocolStore {
     fn clone(&self) -> Self {
-        let py_storage = if let Some(storage) = &self.py_storage {
-            Python::with_gil(|py| Some(storage.clone_ref(py)))
-        } else {
-            None
-        };
-
         Self {
-            store: self.store.clone(),
-            py_storage,
+            store: RwLock::new(self.store.read().unwrap().clone()),
+            persistence_manager: None, // Can't easily clone async database connections
         }
     }
 }
 
 #[pymethods]
 impl InMemSignalProtocolStore {
+
     #[new]
-    #[pyo3(signature = (key_pair, registration_id, persistent_storage=None))]
+    #[pyo3(signature = (key_pair, registration_id, connection_string=None, device_jid=None))]
     fn new(
-        key_pair: &IdentityKeyPair,
+        key_pair: &crate::identity_key::IdentityKeyPair,
         registration_id: u32,
-        persistent_storage: Option<Py<PersistentStorageBase>>
+        connection_string: Option<String>,
+        device_jid: Option<String>,
     ) -> PyResult<InMemSignalProtocolStore> {
-        match libsignal_protocol_rust::InMemSignalProtocolStore::new(key_pair.key, registration_id) {
-            Ok(store) => Ok(Self { 
-                store,
-                py_storage: persistent_storage 
-            }),
-            Err(err) => Err(SignalProtocolError::new_err(err)),
+        let store = libsignal_protocol_rust::InMemSignalProtocolStore::new(
+            key_pair.key,
+            registration_id,
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+
+        let persistence_manager = match (connection_string, device_jid) {
+            (Some(conn_str), Some(device_id)) => {
+                // Serialize the identity key for the device record
+                let identity_key_bytes = key_pair.key.public_key().serialize();
+                
+                // Use centralized Tokio runtime to handle async persistence setup synchronously
+                let persistence = crate::runtime::block_on(PersistenceManager::new_with_jid_setup(
+                    &conn_str, 
+                    device_id,
+                    registration_id,
+                    &identity_key_bytes
+                )).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    format!("Failed to create persistence manager: {}", e)
+                ))?;
+                Some(persistence)
+            }
+            (Some(conn_str), None) => {
+                // Create persistence without JID (for pairing scenarios)
+                // Serialize the identity key for the device record
+                let identity_key_bytes = key_pair.key.public_key().serialize();
+                
+                // Use centralized Tokio runtime to handle async persistence setup synchronously
+                let persistence = crate::runtime::block_on(PersistenceManager::new_device(
+                    &conn_str,
+                    registration_id,
+                    &identity_key_bytes
+                )).map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    format!("Failed to create persistence manager: {}", e)
+                ))?;
+                Some(persistence)
+            }
+            (None, None) => {
+                // No persistence
+                None
+            }
+            (None, Some(_)) => {
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                    "Connection string is required when device_jid is provided"
+                ));
+            }
+        };
+
+        Ok(InMemSignalProtocolStore { 
+            store: RwLock::new(store), 
+            persistence_manager,
+        })
+    }
+
+
+    // Identity Store Methods - these are needed for basic store operations
+    fn get_identity_key_pair(&self) -> PyResult<crate::identity_key::IdentityKeyPair> {
+        use libsignal_protocol_rust::IdentityKeyStore;
+        let key = crate::runtime::block_on(self.store.read().unwrap().get_identity_key_pair(None))
+            .map_err(crate::error::SignalProtocolError::new_err)?;
+        Ok(crate::identity_key::IdentityKeyPair { key })
+    }
+
+    fn get_local_registration_id(&self) -> PyResult<u32> {
+        use libsignal_protocol_rust::IdentityKeyStore;
+        Ok(crate::runtime::block_on(
+            self.store.read().unwrap().get_local_registration_id(None),
+        ).map_err(crate::error::SignalProtocolError::new_err)?)
+    }
+
+    /// Close the store and clean up resources
+    /// 
+    /// This method closes database connections and cleans up resources.
+    /// After calling this method, the store should not be used for database operations.
+    fn close(&mut self) -> PyResult<()> {
+        if let Some(ref mut persistence) = self.persistence_manager {
+            // Close the database connection pool
+            crate::runtime::block_on(persistence.close());
+        }
+        Ok(())
+    }
+
+    // Signal Protocol Store Methods - properly expose the trait implementations to Python
+    // These methods use the cache + backing store implementation via the traits
+
+    // Session Store Methods - use cache + backing store pattern via SessionStore trait
+    fn load_session(&self, address: &crate::address::ProtocolAddress) -> PyResult<Option<crate::state::SessionRecord>> {
+        use libsignal_protocol_rust::SessionStore;
+        // Use centralized runtime for async-to-sync bridging
+        let result = crate::runtime::block_on(
+            SessionStore::load_session(self, &address.state, None)
+        );
+        
+        let result = result.map_err(crate::error::SignalProtocolError::new_err)?;
+        match result {
+            Some(record) => Ok(Some(crate::state::SessionRecord { state: record })),
+            None => Ok(None),
+        }
+    }
+    
+    fn store_session(&mut self, address: &crate::address::ProtocolAddress, session_record: &crate::state::SessionRecord) -> PyResult<()> {
+        use libsignal_protocol_rust::SessionStore;
+        // Use centralized Tokio runtime
+        let result = crate::runtime::block_on(SessionStore::store_session(self, &address.state, &session_record.state, None));
+        
+        result.map_err(crate::error::SignalProtocolError::new_err)?;
+        Ok(())
+    }
+
+    // PreKey Store Methods - delegate to PreKeyStore trait
+    fn get_pre_key(&self, pre_key_id: u32) -> PyResult<crate::state::PreKeyRecord> {
+        use libsignal_protocol_rust::PreKeyStore;
+        let result = crate::runtime::block_on(
+            PreKeyStore::get_pre_key(self, pre_key_id, None)
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+        Ok(crate::state::PreKeyRecord { state: result })
+    }
+    
+    fn save_pre_key(&mut self, pre_key_id: u32, pre_key_record: &crate::state::PreKeyRecord) -> PyResult<()> {
+        use libsignal_protocol_rust::PreKeyStore;
+        crate::runtime::block_on(
+            PreKeyStore::save_pre_key(self, pre_key_id, &pre_key_record.state, None)
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+        Ok(())
+    }
+    
+    fn remove_pre_key(&mut self, pre_key_id: u32) -> PyResult<()> {
+        use libsignal_protocol_rust::PreKeyStore;
+        crate::runtime::block_on(
+            PreKeyStore::remove_pre_key(self, pre_key_id, None)
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+        Ok(())
+    }
+
+    // SignedPreKey Store Methods - delegate to SignedPreKeyStore trait
+    fn get_signed_pre_key(&self, signed_pre_key_id: u32) -> PyResult<crate::state::SignedPreKeyRecord> {
+        use libsignal_protocol_rust::SignedPreKeyStore;
+        let result = crate::runtime::block_on(
+            SignedPreKeyStore::get_signed_pre_key(self, signed_pre_key_id, None)
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+        Ok(crate::state::SignedPreKeyRecord { state: result })
+    }
+    
+    fn save_signed_pre_key(&mut self, signed_pre_key_id: u32, signed_pre_key_record: &crate::state::SignedPreKeyRecord) -> PyResult<()> {
+        use libsignal_protocol_rust::SignedPreKeyStore;
+        crate::runtime::block_on(
+            SignedPreKeyStore::save_signed_pre_key(self, signed_pre_key_id, &signed_pre_key_record.state, None)
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+        Ok(())
+    }
+
+    // Identity Store Methods - delegate to IdentityKeyStore trait  
+    fn save_identity(&mut self, address: &crate::address::ProtocolAddress, identity_key: &crate::identity_key::IdentityKey) -> PyResult<bool> {
+        use libsignal_protocol_rust::IdentityKeyStore;
+        let result = crate::runtime::block_on(
+            IdentityKeyStore::save_identity(self, &address.state, &identity_key.key, None)
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+        Ok(result)
+    }
+    
+    fn get_identity(&self, address: &crate::address::ProtocolAddress) -> PyResult<Option<crate::identity_key::IdentityKey>> {
+        use libsignal_protocol_rust::IdentityKeyStore;
+        let result = crate::runtime::block_on(
+            IdentityKeyStore::get_identity(self, &address.state, None)
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+        
+        match result {
+            Some(key) => Ok(Some(crate::identity_key::IdentityKey { key })),
+            None => Ok(None),
         }
     }
 
-    // Identity Store Methods
-    fn get_identity_key_pair(&self) -> Result<IdentityKeyPair> {
-        let key = block_on(self.store.identity_store.get_identity_key_pair(None))?;
-        Ok(IdentityKeyPair { key })
+    // SenderKey Store Methods - delegate to SenderKeyStore trait
+    fn store_sender_key(&mut self, sender_key_name: &crate::sender_keys::SenderKeyName, sender_key_record: &crate::sender_keys::SenderKeyRecord) -> PyResult<()> {
+        use libsignal_protocol_rust::SenderKeyStore;
+        crate::runtime::block_on(
+            SenderKeyStore::store_sender_key(self, &sender_key_name.state, &sender_key_record.state, None)
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+        Ok(())
+    }
+    
+    fn load_sender_key(&mut self, sender_key_name: &crate::sender_keys::SenderKeyName) -> PyResult<Option<crate::sender_keys::SenderKeyRecord>> {
+        use libsignal_protocol_rust::SenderKeyStore;
+        let result = crate::runtime::block_on(
+            SenderKeyStore::load_sender_key(self, &sender_key_name.state, None)
+        ).map_err(crate::error::SignalProtocolError::new_err)?;
+        
+        match result {
+            Some(record) => Ok(Some(crate::sender_keys::SenderKeyRecord { state: record })),
+            None => Ok(None),
+        }
     }
 
-    fn get_local_registration_id(&self) -> Result<u32> {
-        Ok(block_on(
-            self.store.identity_store.get_local_registration_id(None),
-        )?)
-    }
-
-    fn save_identity(&mut self, address: &ProtocolAddress, identity: &IdentityKey) -> Result<bool> {
-        // Always save in cache
-        let cached_result = block_on(self.store.identity_store.save_identity(
-            &address.state,
-            &identity.key,
-            None,
-        ))?;
-
-        // Also save in persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "save_identity", (py_address, identity.clone())) {
-                    Ok(_) => Ok(cached_result),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
-                }
+    // Database utility methods (only available when persistence is enabled)
+    
+    /// Run database migrations (only available when persistence is enabled)
+    fn migrate<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                persistence_clone.migrate().await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Migration failed: {}", e)))?;
+                Ok(())
             })
         } else {
-            Ok(cached_result)
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Migration only available when persistence is enabled"
+            ))
         }
     }
 
-    fn get_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>> {
-        // Try cache first
-        let cached = block_on(self.store.identity_store.get_identity(&address.state, None))?;
-
-        if cached.is_some() {
-            return Ok(cached.map(|key| IdentityKey { key }));
-        }
-
-        // Fall back to persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "get_identity", (py_address,)) {
-                    Ok(result) => {
-                        match result.extract::<Option<IdentityKey>>(py) {
-                            Ok(identity) => {
-                                if let Some(identity) = &identity {
-                                    let mut store = self.store.clone();
-                                    let address_state = address.state.clone();
-                                    let identity_key = identity.key.clone();
-                                    block_on(store.identity_store.save_identity(&address_state, &identity_key, None))?;
-                                }
-                                Ok(identity)
-                            },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
-                        }
-                    },
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
-                }
-            })
+    /// Get the device JID (only available when persistence is enabled)
+    fn device_jid(&self) -> PyResult<String> {
+        if let Some(ref persistence) = self.persistence_manager {
+            Ok(persistence.device_jid().unwrap_or("").to_string())
         } else {
-            Ok(None)
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Device JID only available when persistence is enabled"
+            ))
         }
     }
 
-    // Session Store Methods
-    pub fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>> {
-        // Try cache first
-        let cached = block_on(self.store.load_session(&address.state, None))?;
-
-        if cached.is_some() {
-            return Ok(cached.map(|state| SessionRecord { state }));
-        }
-
-        // Fall back to persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "load_session", (py_address,)) {
-                    Ok(result) => {
-                        match result.extract::<Option<SessionRecord>>(py) {
-                            Ok(session) => {
-                                if let Some(session) = &session {
-                                    let mut store = self.store.clone();
-                                    let address_state = address.state.clone();
-                                    let session_state = session.state.clone();
-                                    block_on(store.store_session(&address_state, &session_state, None))?;
-                                }
-                                Ok(session)
-                            },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
-                        }
-                    },
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
-                }
-            })
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn store_session(&mut self, address: &ProtocolAddress, record: &SessionRecord) -> Result<()> {
-        // Always store in cache
-        block_on(
-            self.store
-                .store_session(&address.state, &record.state, None),
-        )?;
-
-        // Also store in persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                let py_address = format!("{}:{}", address.name(), address.device_id());
-                match py_storage.call_method1(py, "store_session", (py_address, record.clone())) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
-                }
-            })
-        } else {
-            Ok(())
-        }
-    }
-
-    // PreKey Store Methods
-    fn get_pre_key(&self, id: PreKeyId) -> Result<PreKeyRecord> {
-        // Try cache first
-        match block_on(self.store.pre_key_store.get_pre_key(id, None)) {
-            Ok(state) => Ok(PreKeyRecord { state }),
-            Err(_) => {
-                // If not in cache, try persistent storage
-                if let Some(ref py_storage) = self.py_storage {
-                    Python::with_gil(|py| {
-                        match py_storage.call_method1(py, "get_pre_key", (id,)) {
-                            Ok(result) => {
-                                match result.extract::<PreKeyRecord>(py) {
-                                    Ok(record) => {
-                                        let mut store = self.store.clone();
-                                        block_on(store.pre_key_store.save_pre_key(id, &record.state, None))?;
-                                        Ok(record)
-                                    },
-                                    Err(err) => Err(SignalProtocolError::from(
-                                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                            format!("Python error: {}", err)
-                                        )
-                                    ).into())
-                                }
-                            },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
-                        }
-                    })
-                } else {
-                    Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("PreKey with ID {} not found", id)
-                        )
-                    ).into())
+    /// Check if a session exists for the given address
+    fn contains_session(&self, address: &crate::address::ProtocolAddress) -> PyResult<bool> {
+        // First check in-memory cache (always available)
+        let cache_has_session = match self.load_session(address) {
+            Ok(Some(_)) => true,
+            Ok(None) => false,
+            Err(_) => false, // Treat cache errors as "not found"
+        };
+        
+        if cache_has_session {
+            // Found in cache, return immediately
+            Ok(true)
+        } else if let Some(ref persistence) = self.persistence_manager {
+            // Not in cache, check database if persistence enabled
+            // Handle async database call synchronously using centralized runtime
+            let result = crate::runtime::block_on(persistence.contains_session(&address.state));
+            
+            match result {
+                Ok(exists) => Ok(exists),
+                Err(_) => {
+                    // Database error, treat as "not found"
+                    Ok(false)
                 }
             }
+        } else {
+            // No persistence, cache miss means no session
+            Ok(false)
         }
     }
 
-    fn save_pre_key(&mut self, id: PreKeyId, record: &PreKeyRecord) -> Result<()> {
-        // Always save in cache
-        block_on(
-            self.store
-                .pre_key_store
-                .save_pre_key(id, &record.state, None),
-        )?;
-
-        // Also save in persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                match py_storage.call_method1(py, "save_pre_key", (id, record.clone())) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
-                }
+    /// Delete a specific session (only available when persistence is enabled)
+    fn delete_session<'py>(&self, py: Python<'py>, recipient_name: String, recipient_device_id: i32) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.delete_session(&recipient_name, recipient_device_id).await
+                    .map_err(crate::error::SignalProtocolError::new_err)?;
+                Ok(result)
             })
         } else {
-            Ok(())
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Session deletion only available when persistence is enabled"
+            ))
         }
     }
 
-    fn remove_pre_key(&mut self, id: PreKeyId) -> Result<()> {
-        // Remove from cache
-        block_on(self.store.pre_key_store.remove_pre_key(id, None))?;
-
-        // Also remove from persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                match py_storage.call_method1(py, "remove_pre_key", (id,)) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
-                }
+    /// Delete all sessions for a user (only available when persistence is enabled)
+    fn delete_all_sessions_for_user<'py>(&self, py: Python<'py>, user_prefix: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.delete_all_sessions_for_user(&user_prefix).await
+                    .map_err(crate::error::SignalProtocolError::new_err)?;
+                Ok(result)
             })
         } else {
-            Ok(())
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Session deletion only available when persistence is enabled"
+            ))
         }
     }
 
-    // Signed PreKey Store Methods
-    fn get_signed_pre_key(&self, id: SignedPreKeyId) -> Result<SignedPreKeyRecord> {
-        // Try cache first
-        match block_on(self.store.get_signed_pre_key(id, None)) {
-            Ok(state) => Ok(SignedPreKeyRecord { state }),
-            Err(_) => {
-                // If not in cache, try persistent storage
-                if let Some(ref py_storage) = self.py_storage {
-                    Python::with_gil(|py| {
-                        match py_storage.call_method1(py, "get_signed_pre_key", (id,)) {
-                            Ok(result) => {
-                                match result.extract::<SignedPreKeyRecord>(py) {
-                                    Ok(record) => {
-                                        let mut store = self.store.clone();
-                                        block_on(store.save_signed_pre_key(id, &record.state, None))?;
-                                        Ok(record)
-                                    },
-                                    Err(err) => Err(SignalProtocolError::from(
-                                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                            format!("Python error: {}", err)
-                                        )
-                                    ).into())
-                                }
-                            },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
+    // Convenient session deletion wrapper methods
+
+    /// Delete a session by address string (convenient wrapper)
+    fn delete_session_by_address<'py>(&self, py: Python<'py>, address: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                // Parse address string - try "name:device_id" format first
+                let (recipient_name, recipient_device_id) = match address.rsplit_once(':') {
+                    Some((name, device_id_str)) => {
+                        match device_id_str.parse::<i32>() {
+                            Ok(device_id) => (name.to_string(), device_id),
+                            Err(_) => {
+                                // If parsing fails, treat as device_id=0
+                                (address.clone(), 0)
+                            }
                         }
-                    })
-                } else {
-                    Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("SignedPreKey with ID {} not found", id)
-                        )
-                    ).into())
-                }
-            }
+                    }
+                    None => {
+                        // No colon found, treat as device_id=0
+                        (address.clone(), 0)
+                    }
+                };
+
+                let result = persistence_clone.delete_session(&recipient_name, recipient_device_id).await
+                    .map_err(crate::error::SignalProtocolError::new_err)?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Session deletion only available when persistence is enabled"
+            ))
         }
     }
 
-    fn save_signed_pre_key(
-        &mut self,
-        id: SignedPreKeyId,
-        record: &SignedPreKeyRecord,
-    ) -> Result<()> {
-        // Always save in cache
-        block_on(
-            self.store
-                .save_signed_pre_key(id, &record.state.to_owned(), None),
-        )?;
-
-        // Also save in persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                match py_storage.call_method1(py, "save_signed_pre_key", (id, record.clone())) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
-                }
+    /// Delete all sessions for a phone number (convenient wrapper)
+    fn delete_all_sessions_by_phone<'py>(&self, py: Python<'py>, phone: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                // Create pattern for phone-based sessions: "phone:"
+                let phone_pattern = format!("{}:", phone);
+                let result = persistence_clone.delete_all_sessions_for_user(&phone_pattern).await
+                    .map_err(crate::error::SignalProtocolError::new_err)?;
+                Ok(result)
             })
         } else {
-            Ok(())
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Session deletion only available when persistence is enabled"
+            ))
         }
     }
 
-    // Sender Key Store Methods
-    fn store_sender_key(
-        &mut self,
-        sender_key_name: &SenderKeyName,
-        record: &SenderKeyRecord,
-    ) -> Result<()> {
-        // Always store in cache
-        block_on(self.store.store_sender_key(
-            &sender_key_name.state,
-            &record.state,
-            None,
-        ))?;
-
-        // Also store in persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                let group_id = sender_key_name.group_id().unwrap_or_else(|_| "unknown".to_string());
-                let sender_addr = sender_key_name.sender().unwrap_or_else(|_| {
-                    ProtocolAddress { state: libsignal_protocol_rust::ProtocolAddress::new("unknown".to_string(), 0) }
-                });
-                let key_name = format!("{}:{}", group_id, format!("{}:{}", sender_addr.name(), sender_addr.device_id()));
-                match py_storage.call_method1(py, "store_sender_key", (key_name, record.clone())) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
-                }
+    /// Migrate sessions, identity keys, and sender keys from phone number to LID
+    /// 
+    /// This method performs atomic migration of all Signal Protocol data associated
+    /// with a phone number to a LID (Link ID) format. It handles sessions, identity keys,
+    /// and sender keys in a single transaction.
+    /// 
+    /// The migration process:
+    /// 1. Attempts to UPDATE existing records to the new LID format
+    /// 2. If conflicts occur (LID already exists), ignores the update
+    /// 3. Always deletes the old phone number records after migration attempt
+    /// 4. All operations are performed in a single database transaction
+    /// 
+    /// Returns a tuple of (sessions_updated, identity_keys_updated, sender_keys_updated)
+    fn migrate_pn_to_lid<'py>(&self, py: Python<'py>, pn_signal: String, lid_signal: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.migrate_pn_to_lid(&pn_signal, &lid_signal).await
+                    .map_err(crate::error::SignalProtocolError::new_err)?;
+                
+                // Convert the tuple to a Python tuple
+                let (sessions_updated, identity_keys_updated, sender_keys_updated) = result;
+                Ok((sessions_updated, identity_keys_updated, sender_keys_updated))
             })
         } else {
-            Ok(())
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Migration only available when persistence is enabled"
+            ))
         }
     }
 
-    fn load_sender_key(
-        &mut self,
-        sender_key_name: &SenderKeyName,
-    ) -> Result<Option<SenderKeyRecord>> {
-        // Try cache first
-        let cached = block_on(self.store.load_sender_key(&sender_key_name.state, None))?;
-
-        if cached.is_some() {
-            return Ok(cached.map(|state| SenderKeyRecord { state }));
-        }
-
-        // Fall back to persistent storage if available
-        if let Some(ref py_storage) = self.py_storage {
-            Python::with_gil(|py| {
-                let group_id = sender_key_name.group_id().unwrap_or_else(|_| "unknown".to_string());
-                let sender_addr = sender_key_name.sender().unwrap_or_else(|_| {
-                    ProtocolAddress { state: libsignal_protocol_rust::ProtocolAddress::new("unknown".to_string(), 0) }
-                });
-                let key_name = format!("{}:{}", group_id, format!("{}:{}", sender_addr.name(), sender_addr.device_id()));
-                match py_storage.call_method1(py, "load_sender_key", (key_name,)) {
-                    Ok(result) => {
-                        match result.extract::<Option<SenderKeyRecord>>(py) {
-                            Ok(record) => {
-                                if let Some(record) = &record {
-                                    let mut store = self.store.clone();
-                                    let sender_key_name_state = sender_key_name.state.clone();
-                                    let record_state = record.state.clone();
-                                    block_on(store.store_sender_key(&sender_key_name_state, &record_state, None))?;
-                                }
-                                Ok(record)
-                            },
-                            Err(err) => Err(SignalProtocolError::from(
-                                libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                                    format!("Python error: {}", err)
-                                )
-                            ).into())
-                        }
-                    },
-                    Err(err) => Err(SignalProtocolError::from(
-                        libsignal_protocol_rust::SignalProtocolError::InvalidArgument(
-                            format!("Python error: {}", err)
-                        )
-                    ).into())
-                }
+    /// Mark a pre-key as uploaded (only available when persistence is enabled)
+    fn mark_pre_key_uploaded<'py>(&self, py: Python<'py>, pre_key_id: u32) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.mark_pre_key_uploaded(pre_key_id).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to mark pre-key as uploaded: {}", e)
+                    ))?;
+                Ok(result)
             })
         } else {
-            Ok(None)
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key upload marking only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Delete all identity keys for recipients whose names start with the given phone number
+    fn delete_all_identities<'py>(&self, py: Python<'py>, phone: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.delete_all_identities(&phone).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to delete identities: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Identity deletion only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Delete a specific identity key for a given address string
+    fn delete_identity<'py>(&self, py: Python<'py>, address_str: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                // Parse the address string to extract recipient_name and device_id
+                // Expected format: "recipient_name:device_id"
+                let address = match crate::address::parse_address_string(&address_str) {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            format!("Invalid address format '{}': {}", address_str, e)
+                        ));
+                    }
+                };
+
+                let result = persistence_clone.delete_identity(&address).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to delete identity: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Identity deletion only available when persistence is enabled"
+            ))
+        }
+    }
+
+    // Pre-key helper methods
+
+    /// Get the next available pre-key ID
+    fn get_next_pre_key_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.get_next_pre_key_id().await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to get next pre-key ID: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key ID generation only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Get existing non-uploaded pre-keys, ordered by key_id
+    #[pyo3(signature = (limit=None))]
+    fn get_non_uploaded_pre_keys<'py>(&self, py: Python<'py>, limit: Option<u32>) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let keys = persistence_clone.get_non_uploaded_pre_keys(limit).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to get non-uploaded pre-keys: {}", e)
+                    ))?;
+                
+                // Convert to Python list of tuples (key_id, serialized_data)
+                let py_keys: Vec<(u32, Vec<u8>)> = keys;
+                Ok(py_keys)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key retrieval only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Mark pre-keys as uploaded up to the given ID (inclusive)
+    fn mark_pre_keys_as_uploaded_up_to<'py>(&self, py: Python<'py>, up_to_id: u32) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.mark_pre_keys_as_uploaded_up_to(up_to_id).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to mark pre-keys as uploaded: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key upload marking only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Get the count of uploaded pre-keys
+    fn uploaded_prekey_count<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let result = persistence_clone.uploaded_prekey_count().await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to get uploaded pre-key count: {}", e)
+                    ))?;
+                Ok(result)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key count only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Generate and save a pre-key with the given ID
+    #[pyo3(signature = (key_id, mark_uploaded=false))]
+    fn generate_and_save_pre_key<'py>(&self, py: Python<'py>, key_id: u32, mark_uploaded: bool) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref persistence) = self.persistence_manager {
+            let persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                let pre_key_data = persistence_clone.generate_and_save_pre_key(key_id, mark_uploaded).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to generate and save pre-key: {}", e)
+                    ))?;
+                
+                // Return the serialized PreKeyRecord data
+                Ok(pre_key_data)
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Pre-key generation only available when persistence is enabled"
+            ))
+        }
+    }
+
+    /// Update the JID for this store after successful pairing
+    /// 
+    /// This method allows setting the JID after the store was created without one,
+    /// which is useful during the pairing process where the JID is not known initially.
+    fn update_jid<'py>(&mut self, py: Python<'py>, jid: String) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ref mut persistence) = self.persistence_manager {
+            let mut persistence_clone = persistence.clone();
+            pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                persistence_clone.update_jid(jid).await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        format!("Failed to update JID: {}", e)
+                    ))?;
+                
+                Ok(())
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "JID update only available when persistence is enabled"
+            ))
         }
     }
 }
 
+// Implement the libsignal traits for our wrapper using cache + backing store pattern
+#[async_trait::async_trait(?Send)]
+impl libsignal_protocol_rust::SessionStore for InMemSignalProtocolStore {
+    async fn load_session(
+        &self,
+        address: &libsignal_protocol_rust::ProtocolAddress,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<Option<libsignal_protocol_rust::SessionRecord>, libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Try cache first (fast path)
+        match self.store.read().unwrap().load_session(address, ctx).await {
+            Ok(Some(session)) => {
+                // Found in cache
+                return Ok(Some(session));
+            }
+            Ok(None) => {
+                // Not in cache, try database if persistence enabled
+                if let Some(ref persistence) = self.persistence_manager {
+                    log::debug!("About to load session from database");
+                    // We're already in an async context, just await directly
+                    let db_result = persistence.load_session(address, ctx).await;
+                    
+                    match db_result {
+                        Ok(Some(session)) => {
+                            // Found in database - update cache and return the session
+                            log::debug!("Session found in database, updating cache");
+                            
+                            // Create a copy of the session for cache update to avoid borrowing issues  
+                            let session_copy = session.clone();
+                            let address_copy = address.clone();
+                            
+                            // Get a write lock to update the cache directly (blocking approach)
+                            // This is safer than spawning async tasks with shared state
+                            if let Ok(mut store) = self.store.try_write() {
+                                match store.store_session(&address_copy, &session_copy, None).await {
+                                    Ok(_) => log::debug!("Cache updated successfully for session"),
+                                    Err(e) => log::warn!("Cache update failed for session: {:?}", e),
+                                }
+                            } else {
+                                log::debug!("Could not acquire write lock for cache update, skipping");
+                            }
+                            
+                            return Ok(Some(session));
+                        }
+                        Ok(None) => {
+                            // Not found in database either
+                            log::debug!("Session not found in database");
+                            return Ok(None);
+                        }
+                        Err(err) => {
+                            // Database error should be propagated, not silently ignored
+                            log::error!("Database error loading session: {:?}", err);
+                            return Err(err);
+                        }
+                    }
+                } else {
+                    // No persistence, cache miss means no session
+                    return Ok(None);
+                }
+            }
+            Err(err) => {
+                // Cache error, propagate it
+                return Err(err);
+            }
+        }
+    }
+
+    async fn store_session(
+        &mut self,
+        address: &libsignal_protocol_rust::ProtocolAddress,
+        record: &libsignal_protocol_rust::SessionRecord,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<(), libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Store in cache (fast access)
+        self.store.write().unwrap().store_session(address, record, ctx).await?;
+
+        // 2. Store in database if persistence enabled
+        if let Some(ref persistence) = self.persistence_manager {
+            log::debug!("About to store session in database");
+            // Clone persistence manager for mutable operations
+            let mut persistence_clone = persistence.clone();
+            
+            // Handle database operations using centralized runtime
+            let db_result = crate::runtime::block_on(persistence_clone.store_session(address, record, ctx));
+            
+            // Note: This may fail if database is unavailable, but cache is still updated
+            match db_result {
+                Ok(()) => {
+                    log::debug!("Session stored successfully in database");
+                }
+                Err(err) => {
+                    log::error!("Database error storing session: {:?}", err);
+                    // Continue anyway - cache is updated
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// Implement the libsignal traits for our wrapper using cache + backing store pattern
+#[async_trait::async_trait(?Send)]
+impl libsignal_protocol_rust::IdentityKeyStore for InMemSignalProtocolStore {
+    async fn get_identity_key_pair(&self, ctx: libsignal_protocol_rust::Context) -> std::result::Result<libsignal_protocol_rust::IdentityKeyPair, libsignal_protocol_rust::SignalProtocolError> {
+        // Identity key pair is immutable, stored in cache only
+        self.store.read().unwrap().get_identity_key_pair(ctx).await
+    }
+
+    async fn get_local_registration_id(&self, ctx: libsignal_protocol_rust::Context) -> std::result::Result<u32, libsignal_protocol_rust::SignalProtocolError> {
+        // Registration ID is immutable, stored in cache only
+        self.store.read().unwrap().get_local_registration_id(ctx).await
+    }
+
+    async fn save_identity(
+        &mut self,
+        address: &libsignal_protocol_rust::ProtocolAddress,
+        identity: &libsignal_protocol_rust::IdentityKey,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<bool, libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Store in cache (fast access)
+        let result = self.store.write().unwrap().save_identity(address, identity, ctx).await?;
+
+        // 2. Store in database if persistence enabled
+        if let Some(ref persistence) = self.persistence_manager {
+            // Clone persistence manager for mutable operations
+            let mut persistence_clone = persistence.clone();
+            
+            // Handle database operations using centralized runtime
+            let db_result = crate::runtime::block_on(persistence_clone.save_identity(address, identity, ctx));
+            
+            // Note: This may fail if database is unavailable, but cache is still updated
+            if let Err(err) = db_result {
+                log::error!("Database error storing identity: {:?}", err);
+                // Continue anyway - cache is updated
+            }
+        }
+
+        Ok(result)
+    }
+
+    async fn is_trusted_identity(
+        &self,
+        address: &libsignal_protocol_rust::ProtocolAddress,
+        identity: &libsignal_protocol_rust::IdentityKey,
+        direction: libsignal_protocol_rust::Direction,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<bool, libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Check cache first
+        // Create direction values for both cache and database since Direction doesn't implement Copy
+        let (cache_direction, db_direction) = match direction {
+            libsignal_protocol_rust::Direction::Sending => (
+                libsignal_protocol_rust::Direction::Sending,
+                libsignal_protocol_rust::Direction::Sending,
+            ),
+            libsignal_protocol_rust::Direction::Receiving => (
+                libsignal_protocol_rust::Direction::Receiving,
+                libsignal_protocol_rust::Direction::Receiving,
+            ),
+        };
+        
+        match self.store.read().unwrap().is_trusted_identity(address, identity, cache_direction, ctx).await {
+            Ok(result) => Ok(result),
+            Err(_) => {
+                // Cache doesn't have the identity, check database if persistence enabled
+                
+                if let Some(ref persistence) = self.persistence_manager {
+                    // Handle database operations using centralized runtime
+                    let db_result = crate::runtime::block_on(persistence.is_trusted_identity(address, identity, db_direction, ctx));
+                    
+                    match db_result {
+                        Ok(result) => Ok(result),
+                        Err(err) => {
+                            // Database error, log but don't fail - trust on first use
+                            log::error!("Database error checking identity trust: {}", err);
+                            Ok(true)
+                        }
+                    }
+                } else {
+                    // No persistence, trust on first use
+                    Ok(true)
+                }
+            }
+        }
+    }
+
+    async fn get_identity(
+        &self,
+        address: &libsignal_protocol_rust::ProtocolAddress,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<Option<libsignal_protocol_rust::IdentityKey>, libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Try cache first (fast path)
+        match self.store.read().unwrap().get_identity(address, ctx).await {
+            Ok(Some(identity)) => {
+                // Found in cache
+                return Ok(Some(identity));
+            }
+            Ok(None) => {
+                // Not in cache, try database if persistence enabled
+                if let Some(ref persistence) = self.persistence_manager {
+                    // Handle Tokio runtime context properly for database operations
+                    // We're already in an async context, just await directly
+                    let db_result = persistence.get_identity(address, ctx).await;
+                    
+                    match db_result {
+                        Ok(Some(identity)) => {
+                            // Found in database - update cache and return the identity
+                            log::debug!("Identity found in database, updating cache");
+                            
+                            // Create a copy of the identity for cache update to avoid borrowing issues
+                            let identity_copy = identity.clone();
+                            let address_copy = address.clone();
+                            
+                            // Get a write lock to update the cache directly (blocking approach)
+                            // This is safer than spawning async tasks with shared state
+                            if let Ok(mut store) = self.store.try_write() {
+                                match store.save_identity(&address_copy, &identity_copy, None).await {
+                                    Ok(_) => log::debug!("Cache updated successfully for identity"),
+                                    Err(e) => log::warn!("Cache update failed for identity: {:?}", e),
+                                }
+                            } else {
+                                log::debug!("Could not acquire write lock for cache update, skipping");
+                            }
+                            
+                            return Ok(Some(identity));
+                        }
+                        Ok(None) => {
+                            // Not found in database either
+                            return Ok(None);
+                        }
+                        Err(err) => {
+                            // Database error should be propagated, not silently ignored
+                            log::error!("Database error loading identity: {:?}", err);
+                            return Err(err);
+                        }
+                    }
+                } else {
+                    // No persistence, cache miss means no identity
+                    return Ok(None);
+                }
+            }
+            Err(err) => {
+                // Cache error, propagate it
+                return Err(err);
+            }
+        }
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl libsignal_protocol_rust::PreKeyStore for InMemSignalProtocolStore {
+    async fn get_pre_key(
+        &self,
+        prekey_id: u32,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<libsignal_protocol_rust::PreKeyRecord, libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Try cache first (fast path)
+        match self.store.read().unwrap().get_pre_key(prekey_id, ctx).await {
+            Ok(record) => {
+                // Found in cache
+                return Ok(record);
+            }
+            Err(_) => {
+                // Not in cache, try database if persistence enabled
+                if let Some(ref persistence) = self.persistence_manager {
+                    // Handle database operations using centralized runtime
+                    let db_result = crate::runtime::block_on(persistence.get_pre_key(prekey_id, ctx));
+                    
+                    match db_result {
+                        Ok(record) => {
+                            // Found in database, return it directly
+                            // TODO: Update cache - requires &mut self but get_pre_key only has &self
+                            // The libsignal store methods require mutable access for cache updates
+                            return Ok(record);
+                        }
+                        Err(err) => {
+                            // Database error or not found, return the original cache error
+                            log::error!("Database error loading pre-key: {}", err);
+                            return self.store.read().unwrap().get_pre_key(prekey_id, ctx).await;
+                        }
+                    }
+                } else {
+                    // No persistence, return cache error
+                    return self.store.read().unwrap().get_pre_key(prekey_id, ctx).await;
+                }
+            }
+        }
+    }
+
+    async fn save_pre_key(
+        &mut self,
+        prekey_id: u32,
+        record: &libsignal_protocol_rust::PreKeyRecord,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<(), libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Store in cache (fast access)
+        self.store.write().unwrap().save_pre_key(prekey_id, record, ctx).await?;
+
+        // 2. Store in database if persistence enabled
+        if let Some(ref mut persistence) = self.persistence_manager {
+            // Handle database operations using centralized runtime
+            let db_result = crate::runtime::block_on(persistence.save_pre_key(prekey_id, record, ctx));
+            
+            // Note: This may fail if database is unavailable, but cache is still updated
+            if let Err(err) = db_result {
+                log::error!("Database error storing pre-key: {}", err);
+                // Continue anyway - cache is updated
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn remove_pre_key(
+        &mut self,
+        prekey_id: u32,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<(), libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Remove from cache
+        self.store.write().unwrap().remove_pre_key(prekey_id, ctx).await?;
+
+        // 2. Remove from database if persistence enabled
+        if let Some(ref mut persistence) = self.persistence_manager {
+            // Handle database operations using centralized runtime
+            let db_result = crate::runtime::block_on(persistence.remove_pre_key(prekey_id, ctx));
+            
+            // Note: This may fail if database is unavailable, but cache is still updated
+            if let Err(err) = db_result {
+                log::error!("Database error removing pre-key: {}", err);
+                // Continue anyway - cache is updated
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl libsignal_protocol_rust::SignedPreKeyStore for InMemSignalProtocolStore {
+    async fn get_signed_pre_key(
+        &self,
+        signed_prekey_id: u32,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<libsignal_protocol_rust::SignedPreKeyRecord, libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Try cache first (fast path)
+        match self.store.read().unwrap().get_signed_pre_key(signed_prekey_id, ctx).await {
+            Ok(record) => {
+                // Found in cache
+                return Ok(record);
+            }
+            Err(_) => {
+                // Not in cache, try database if persistence enabled
+                if let Some(ref persistence) = self.persistence_manager {
+                    // Handle database operations using centralized runtime
+                    let db_result = crate::runtime::block_on(persistence.get_signed_pre_key(signed_prekey_id, ctx));
+                    
+                    match db_result {
+                        Ok(record) => {
+                            // Found in database, update cache before returning
+                            log::debug!("Signed prekey found in database, updating cache");
+                            let mut store = self.store.write().unwrap();
+                            store.save_signed_pre_key(signed_prekey_id, &record, ctx).await?;
+                            log::debug!("Signed prekey cache updated successfully");
+                            return Ok(record);
+                        }
+                        Err(err) => {
+                            // Database error or not found, return the original cache error
+                            log::error!("Database error loading signed pre-key: {}", err);
+                            return self.store.read().unwrap().get_signed_pre_key(signed_prekey_id, ctx).await;
+                        }
+                    }
+                } else {
+                    // No persistence, return cache error
+                    return self.store.read().unwrap().get_signed_pre_key(signed_prekey_id, ctx).await;
+                }
+            }
+        }
+    }
+
+    async fn save_signed_pre_key(
+        &mut self,
+        signed_prekey_id: u32,
+        record: &libsignal_protocol_rust::SignedPreKeyRecord,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<(), libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Store in cache (fast access)
+        self.store.write().unwrap().save_signed_pre_key(signed_prekey_id, record, ctx).await?;
+
+        // 2. Store in database if persistence enabled
+        if let Some(ref mut persistence) = self.persistence_manager {
+            // Handle database operations using centralized runtime
+            let db_result = crate::runtime::block_on(persistence.save_signed_pre_key(signed_prekey_id, record, ctx));
+            
+            // Note: This may fail if database is unavailable, but cache is still updated
+            if let Err(err) = db_result {
+                log::error!("Database error storing signed pre-key: {}", err);
+                // Continue anyway - cache is updated
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl libsignal_protocol_rust::SenderKeyStore for InMemSignalProtocolStore {
+    async fn store_sender_key(
+        &mut self,
+        sender_key_name: &libsignal_protocol_rust::SenderKeyName,
+        record: &libsignal_protocol_rust::SenderKeyRecord,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<(), libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Store in cache (fast access)
+        self.store.write().unwrap().store_sender_key(sender_key_name, record, ctx).await?;
+
+        // 2. Store in database if persistence enabled
+        if let Some(ref mut persistence) = self.persistence_manager {
+            // Handle database operations using centralized runtime
+            let db_result = crate::runtime::block_on(persistence.store_sender_key(sender_key_name, record, ctx));
+            
+            // Note: This may fail if database is unavailable, but cache is still updated
+            if let Err(err) = db_result {
+                log::error!("Database error storing sender key: {}", err);
+                // Continue anyway - cache is updated
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn load_sender_key(
+        &mut self,
+        sender_key_name: &libsignal_protocol_rust::SenderKeyName,
+        ctx: libsignal_protocol_rust::Context,
+    ) -> std::result::Result<Option<libsignal_protocol_rust::SenderKeyRecord>, libsignal_protocol_rust::SignalProtocolError> {
+        // 1. Try cache first (fast path)
+        match self.store.write().unwrap().load_sender_key(sender_key_name, ctx).await {
+            Ok(Some(record)) => {
+                // Found in cache
+                return Ok(Some(record));
+            }
+            Ok(None) => {
+                // Not in cache, try database if persistence enabled
+                if let Some(ref mut persistence) = self.persistence_manager {
+                    // Handle database operations using centralized runtime
+                    let db_result = crate::runtime::block_on(persistence.load_sender_key(sender_key_name, ctx));
+                    
+                    match db_result {
+                        Ok(Some(record)) => {
+                            // Found in database, update cache before returning
+                            log::debug!("Sender key found in database, updating cache");
+                            let mut store = self.store.write().unwrap();
+                            store.store_sender_key(sender_key_name, &record, ctx).await?;
+                            log::debug!("Sender key cache updated successfully");
+                            return Ok(Some(record));
+                        }
+                        Ok(None) => {
+                            // Not found in database either
+                            return Ok(None);
+                        }
+                        Err(err) => {
+                            // Database error, log but don't fail - just return cache result
+                            log::error!("Database error loading sender key: {}", err);
+                            return Ok(None);
+                        }
+                    }
+                } else {
+                    // No persistence, cache miss means no sender key
+                    return Ok(None);
+                }
+            }
+            Err(err) => {
+                // Cache error, propagate it
+                return Err(err);
+            }
+        }
+    }
+}
+
+/// Initialize logging (no-op for backward compatibility)
+#[pyfunction]
+pub fn init_logging() {
+    // For now, keep this as a no-op until we resolve the pyo3-log/async runtime conflict
+    // The issue is that pyo3-log::init() seems to interfere with SQLx's async runtime
+    // when called too early in the Python process lifecycle
+    
+    // TODO: Investigate proper integration of pyo3-log with SQLx async runtime
+    // Possible solutions:
+    // 1. Initialize pyo3-log after the Tokio runtime is created
+    // 2. Use a different logging bridge
+    // 3. Configure pyo3-log to not interfere with async operations
+}
+
+/// Shutdown the global async runtime and perform final cleanup
+/// 
+/// Call this function when your application is exiting to ensure:
+/// - All async tasks are properly terminated
+/// - Background threads are stopped  
+/// - Database connections are fully released
+/// - File handles are freed (important for SQLite)
+/// 
+/// After calling this function, creating new stores may fail.
+/// This is primarily useful when you need guaranteed clean shutdown.
+#[pyfunction]
+pub fn shutdown_runtime() {
+    log::info!("Shutting down signal-protocol runtime");
+    crate::runtime::shutdown_runtime();
+}
+
+/// Initialize the storage submodule for Python
 pub fn init_submodule(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<PersistentStorageBase>()?;
     module.add_class::<InMemSignalProtocolStore>()?;
+    module.add_function(wrap_pyfunction!(init_logging, module)?)?;
+    module.add_function(wrap_pyfunction!(shutdown_runtime, module)?)?;
     Ok(())
 }

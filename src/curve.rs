@@ -5,6 +5,8 @@ use pyo3::basic::CompareOp;
 
 
 use rand::rngs::OsRng;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 
 use crate::error::Result;
 
@@ -53,9 +55,26 @@ impl KeyPair {
         PyBytes::new(py, &result).into()
     }
 
-    pub fn calculate_signature(&self, py: Python<'_>, message: &[u8]) -> Result<PyObject> {
-        let mut csprng = OsRng;
-        let sig = self.key.calculate_signature(&message, &mut csprng)?;
+    #[pyo3(signature = (message, fixed_random=None))]
+    pub fn calculate_signature(
+        &self, 
+        py: Python<'_>, 
+        message: &[u8],
+        fixed_random: Option<&[u8]>
+    ) -> Result<PyObject> {
+        let sig = if let Some(seed_bytes) = fixed_random {
+            // Use fixed seed for deterministic behavior
+            let mut seed = [0u8; 32];
+            let copy_len = seed_bytes.len().min(32);
+            seed[..copy_len].copy_from_slice(&seed_bytes[..copy_len]);
+            let mut csprng = ChaCha20Rng::from_seed(seed);
+            self.key.calculate_signature(&message, &mut csprng)?
+        } else {
+            // Use OS RNG for secure random behavior
+            let mut csprng = OsRng;
+            self.key.calculate_signature(&message, &mut csprng)?
+        };
+        
         Ok(PyBytes::new(py, &sig).into())
     }
 
@@ -142,9 +161,26 @@ impl PrivateKey {
         PyBytes::new(py, &self.key.serialize()).into()
     }
 
-    pub fn calculate_signature(&self, message: &[u8], py: Python<'_>) -> Result<PyObject> {
-        let mut csprng = OsRng;
-        let sig = self.key.calculate_signature(message, &mut csprng)?;
+    #[pyo3(signature = (message, fixed_random=None))]
+    pub fn calculate_signature(
+        &self, 
+        message: &[u8], 
+        py: Python<'_>,
+        fixed_random: Option<&[u8]>
+    ) -> Result<PyObject> {
+        let sig = if let Some(seed_bytes) = fixed_random {
+            // Use fixed seed for deterministic behavior
+            let mut seed = [0u8; 32];
+            let copy_len = seed_bytes.len().min(32);
+            seed[..copy_len].copy_from_slice(&seed_bytes[..copy_len]);
+            let mut csprng = ChaCha20Rng::from_seed(seed);
+            self.key.calculate_signature(message, &mut csprng)?
+        } else {
+            // Use OS RNG for secure random behavior
+            let mut csprng = OsRng;
+            self.key.calculate_signature(message, &mut csprng)?
+        };
+        
         Ok(PyBytes::new(py, &sig).into())
     }
 

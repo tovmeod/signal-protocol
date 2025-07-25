@@ -32,6 +32,10 @@ jobs:
         command: build
         args: --release --out dist
 
+    - name: Run Rust test compilation
+      run: |
+        cargo test
+
     - name: Install wheel linux
       if: runner.os != 'Windows'
       run: |

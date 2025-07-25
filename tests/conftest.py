@@ -1,87 +1,133 @@
 import pytest
-from typing import Dict, Optional
+import tempfile
+import os
 from signal_protocol import storage, state, address, identity_key, curve, sender_keys
 
-# Python-based persistent storage logic - now inherits from PersistentStorageBase
-class PersistentStorage(storage.PersistentStorageBase):
-    def __init__(self) -> None:
-        self.identities: Dict[str, identity_key.IdentityKey] = {}
-        self.sessions: Dict[str, state.SessionRecord] = {}
-        self.pre_keys: Dict[int, state.PreKeyRecord] = {}
-        self.signed_pre_keys: Dict[int, state.SignedPreKeyRecord] = {}
-        self.sender_keys: Dict[str, sender_keys.SenderKeyRecord] = {}
+@pytest.fixture(autouse=True)
+def init_signal_logging():
+    """Initialize signal protocol logging for all tests"""
+    storage.init_logging()
 
-    # Identity Store Methods
-    def save_identity(self, address_name: str, identity_key: identity_key.IdentityKey) -> bool:
-        """Save identity for the given address name"""
-        self.identities[address_name] = identity_key
-        return True
+@pytest.fixture
+def temp_db_path():
+    """Create a temporary database file that is automatically cleaned up"""
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=True) as temp_db:
+        yield temp_db.name
 
-    def get_identity(self, address_name: str) -> Optional[identity_key.IdentityKey]:
-        """Get identity for the given address name"""
-        return self.identities.get(address_name, None)
+# Basic store fixture (cache-only)
+@pytest.fixture
+def basic_store():
+    """Create a basic InMemSignalProtocolStore without persistence (cache-only)"""
+    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    alice_registration_id = 1
+    
+    store = storage.InMemSignalProtocolStore(
+        alice_identity_key_pair,
+        alice_registration_id
+    )
+    
+    yield store
+    # No cleanup needed for basic store
 
-    # Session Store Methods
-    def store_session(self, address_name: str, session_record: state.SessionRecord) -> None:
-        """Store session for the given address name"""
-        self.sessions[address_name] = session_record
 
-    def load_session(self, address_name: str) -> Optional[state.SessionRecord]:
-        """Load session for the given address name"""
-        return self.sessions.get(address_name, None)
+# Async fixture for store with database persistence  
+@pytest.fixture
+async def alice_store_with_persistence():
+    """Create Alice's store with database persistence (cache + backing store)"""
+    import tempfile
+    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    alice_registration_id = 1
+    device_jid = "alice@test.com"
+    
+    # Use temporary SQLite database
+    with tempfile.NamedTemporaryFile(suffix='.db') as temp_db:
+        connection_string = f"sqlite://{temp_db.name}"
+        
+        alice_store = storage.InMemSignalProtocolStore(
+            alice_identity_key_pair,
+            alice_registration_id,
+            connection_string=connection_string,
+            device_jid=device_jid
+        )
+        
+        # Run migrations to create database tables
+        await alice_store.migrate()
+        
+        yield alice_store
+        # Database cleanup handled by temp file context manager
 
-    # PreKey Store Methods
-    def get_pre_key(self, pre_key_id: int) -> state.PreKeyRecord:
-        """Get prekey by ID - raises KeyError if not found"""
-        if pre_key_id not in self.pre_keys:
-            raise KeyError(f"PreKey with ID {pre_key_id} not found")
-        return self.pre_keys[pre_key_id]
+@pytest.fixture
+def alice_store() -> storage.InMemSignalProtocolStore:
+    """Create Alice's basic store (cache-only) for testing"""
+    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    alice_registration_id = 1
 
-    def save_pre_key(self, pre_key_id: int, pre_key_record: state.PreKeyRecord) -> None:
-        """Save prekey record with given ID"""
-        self.pre_keys[pre_key_id] = pre_key_record
-
-    def remove_pre_key(self, pre_key_id: int) -> None:
-        """Remove prekey with given ID"""
-        if pre_key_id in self.pre_keys:
-            del self.pre_keys[pre_key_id]
-
-    # Signed PreKey Store Methods
-    def get_signed_pre_key(self, signed_pre_key_id: int) -> state.SignedPreKeyRecord:
-        """Get signed prekey by ID - raises KeyError if not found"""
-        if signed_pre_key_id not in self.signed_pre_keys:
-            raise KeyError(f"SignedPreKey with ID {signed_pre_key_id} not found")
-        return self.signed_pre_keys[signed_pre_key_id]
-
-    def save_signed_pre_key(self, signed_pre_key_id: int, signed_pre_key_record: state.SignedPreKeyRecord) -> None:
-        """Save signed prekey record with given ID"""
-        self.signed_pre_keys[signed_pre_key_id] = signed_pre_key_record
-
-    # Sender Key Store Methods
-    def store_sender_key(self, sender_key_name: str, sender_key_record: sender_keys.SenderKeyRecord) -> None:
-        """Store sender key record with given name"""
-        self.sender_keys[sender_key_name] = sender_key_record
-
-    def load_sender_key(self, sender_key_name: str) -> Optional[sender_keys.SenderKeyRecord]:
-        """Load sender key by name"""
-        return self.sender_keys.get(sender_key_name, None)
-
-    # Utility methods for testing
-    def clear_all(self) -> None:
-        """Clear all stored data - useful for test cleanup"""
-        self.identities.clear()
-        self.sessions.clear()
-        self.pre_keys.clear()
-        self.signed_pre_keys.clear()
-        self.sender_keys.clear()
+    # Create a basic store without persistence
+    alice_store = storage.InMemSignalProtocolStore(
+        alice_identity_key_pair,
+        alice_registration_id
+    )
+    
+    yield alice_store
+    # No cleanup needed for basic store
 
 
 @pytest.fixture
-def persistent_storage() -> PersistentStorage:
-    """Create a fresh PersistentStorage instance for each test"""
-    return PersistentStorage()
+async def bob_store_with_persistence():
+    """Create Bob's store with database persistence (cache + backing store)"""
+    import tempfile
+    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    bob_registration_id = 2
+    device_jid = "bob@test.com"
+    
+    # Use temporary SQLite database
+    with tempfile.NamedTemporaryFile(suffix='.db') as temp_db:
+        connection_string = f"sqlite://{temp_db.name}"
+        
+        bob_store = storage.InMemSignalProtocolStore(
+            bob_identity_key_pair,
+            bob_registration_id,
+            connection_string=connection_string,
+            device_jid=device_jid
+        )
+        
+        # Run migrations to create database tables
+        await bob_store.migrate()
+        
+        yield bob_store
+        # Database cleanup handled by temp file context manager
+
+@pytest.fixture
+def bob_store() -> storage.InMemSignalProtocolStore:
+    """Create Bob's basic store (cache-only) for testing"""
+    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
+    bob_registration_id = 2
+
+    # Create a basic store without persistence
+    bob_store = storage.InMemSignalProtocolStore(
+        bob_identity_key_pair,
+        bob_registration_id
+    )
+    
+    yield bob_store
+    # No cleanup needed for basic store
 
 
+@pytest.fixture
+def proxy_instance(identity_key_pair: identity_key.IdentityKeyPair) -> storage.InMemSignalProtocolStore:
+    """Create a basic storage instance for general testing (cache-only)"""
+    registration_id = 123
+
+    store = storage.InMemSignalProtocolStore(
+        identity_key_pair,
+        registration_id
+    )
+    
+    yield store
+    # No cleanup needed for basic store
+
+
+# Non-parametrized fixtures (these don't depend on storage type)
 @pytest.fixture
 def identity_key_pair() -> identity_key.IdentityKeyPair:
     """Generate a random identity key pair for testing"""
@@ -134,47 +180,3 @@ def sender_key_name(protocol_address: address.ProtocolAddress) -> sender_keys.Se
 def sender_key_record() -> sender_keys.SenderKeyRecord:
     """Create a sender key record for testing"""
     return sender_keys.SenderKeyRecord.new_empty()
-
-
-@pytest.fixture
-def alice_store() -> storage.InMemSignalProtocolStore:
-    """Create Alice's storage for testing"""
-    alice_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    alice_registration_id = 1
-    alice_persistent_storage = PersistentStorage()
-
-    # Create a store with caching
-    alice_store = storage.InMemSignalProtocolStore(
-        alice_identity_key_pair,
-        alice_registration_id,
-        alice_persistent_storage
-    )
-    return alice_store
-
-
-@pytest.fixture
-def bob_store() -> storage.InMemSignalProtocolStore:
-    """Create Bob's storage with caching for testing"""
-    bob_identity_key_pair = identity_key.IdentityKeyPair.generate()
-    bob_registration_id = 2
-    bob_persistent_storage = PersistentStorage()
-
-    # Create a store with caching
-    bob_store = storage.InMemSignalProtocolStore(
-        bob_identity_key_pair,
-        bob_registration_id,
-        bob_persistent_storage
-    )
-    return bob_store
-
-
-@pytest.fixture
-def proxy_instance(identity_key_pair: identity_key.IdentityKeyPair, persistent_storage: PersistentStorage) -> storage.InMemSignalProtocolStore:
-    """Create a storage instance for general testing"""
-    registration_id = 123
-
-    return storage.InMemSignalProtocolStore(
-        identity_key_pair,
-        registration_id,
-        persistent_storage
-    )
