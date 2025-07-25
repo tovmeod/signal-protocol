@@ -6,7 +6,8 @@ edition = "2018"
 license = "AGPL-3.0-only"
 
 [dependencies]
-rand = "0.7.3"
+rand = { version = "0.7.3", features = ["small_rng"] }
+rand_chacha = "0.2.2"
 libsignal-protocol-rust = { git = "https://github.com/freedomofpress/libsignal-client", rev="609a1de73380a2b9d314db625e6b2f0368e838ec" }
 pyo3 = { version = "0.25.1", features = ["extension-module", "experimental-async", "macros"] }
 pyo3-async-runtimes = { version = "0.25", features = ["attributes", "tokio-runtime"] }

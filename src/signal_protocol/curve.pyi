@@ -1,6 +1,6 @@
 # Typing stub for signal_protocol.curve module
 # Direct class definitions instead of type aliases
-from typing import Tuple
+from typing import Tuple, Optional
 
 from ._signal_protocol.curve import (
     KeyPair as _KeyPairImpl,
@@ -26,7 +26,23 @@ class PrivateKey(_PrivateKeyImpl):
     @staticmethod
     def deserialize(key: bytes) -> 'PrivateKey': ...
     def serialize(self) -> bytes: ...
-    def calculate_signature(self, message: bytes) -> bytes: ...
+    def calculate_signature(self, message: bytes, fixed_random: Optional[bytes] = None) -> bytes:
+        """
+        Calculate a signature for the given message.
+        
+        Args:
+            message: The message to sign
+            fixed_random: Optional fixed random bytes for deterministic signatures (testing only)
+                         If None, uses secure OS random number generator
+        
+        Returns:
+            The signature bytes
+            
+        Note:
+            The fixed_random parameter should only be used for testing purposes.
+            In production, always use the default (None) for cryptographic security.
+        """
+        ...
     def calculate_agreement(self, their_key: PublicKey) -> bytes: ...
     def public_key(self) -> PublicKey: ...
 
@@ -41,7 +57,23 @@ class KeyPair(_KeyPairImpl):
     def public_key(self) -> PublicKey: ...
     def private_key(self) -> PrivateKey: ...
     def serialize(self) -> bytes: ...
-    def calculate_signature(self, message: bytes) -> bytes: ...
+    def calculate_signature(self, message: bytes, fixed_random: Optional[bytes] = None) -> bytes:
+        """
+        Calculate a signature for the given message.
+        
+        Args:
+            message: The message to sign
+            fixed_random: Optional fixed random bytes for deterministic signatures (testing only)
+                         If None, uses secure OS random number generator
+        
+        Returns:
+            The signature bytes
+            
+        Note:
+            The fixed_random parameter should only be used for testing purposes.
+            In production, always use the default (None) for cryptographic security.
+        """
+        ...
     def calculate_agreement(self, their_key: PublicKey) -> bytes: ...
 
 # Functions
